@@ -1,0 +1,30 @@
+{application, pecypc, [
+
+  {description, "pecypc description"},
+  {vsn, "0.0.1"},
+
+  % callback module containing start/2 and stop/1 and arguments to start/2
+  % N.B. remove this for library applications
+  {mod, {pecypc_app, []}},
+
+  % names of processes this application registers
+  {registered, [
+    pecypc_web,
+    pecypc
+  ]},
+
+  % dependencies
+  {applications, [
+    kernel,
+    stdlib,
+    crypto,
+    ssl,
+    public_key,
+    cowboy
+  ]},
+
+  % configuration
+  {env, [
+  ]}
+
+]}.
