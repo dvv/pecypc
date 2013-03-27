@@ -41,6 +41,7 @@
 
 init(_Transport, Req, Opts) ->
   % apply apigen pragmatic REST recommendations
+pecypc_log:info(cowboy_req:to_list(Req)),
   Req2 = cowboy_patch:patch_pragmatic_rest(
        cowboy_patch:patch_method(
        cowboy_patch:patch_headers(Req))),
@@ -69,20 +70,21 @@ resource_available(Req, State) ->
   {true, Req, State}.
 
 allowed_methods(Req, State = #state{options = Opts}) ->
-  % {[<<"GET">>, <<"PUT">>, <<"DELETE">>, <<"HEAD">>,
-  %     <<"OPTIONS">>, <<"PATCH">>, <<"POST">>], Req, State}.
+  % % {[<<"GET">>, <<"PUT">>, <<"DELETE">>, <<"HEAD">>,
+  % %     <<"OPTIONS">>, <<"PATCH">>, <<"POST">>], Req, State}.
   {_, Methods} = lists:keyfind(allow, 1, Opts),
   {Methods, Req, State}.
 
 %%
-%% Validate GET requests. Body is not yet available and so is its type.
+%% Validate GET requests. Body is not yet available and conneg is not yet done.
 %%
 malformed_request(Req, State) ->
   {false, Req, State}.
 
 %%
-%% `Authorization: Bearer TOKEN` or `?access_token=TOKEN` required
-%% NB: in fact it's about authentication -- credentials provided? not forged?
+%% Validate authentication credentials provided and not forged.
+%% Bearer or basic authorization required.
+%% @todo consider dropping security key before continuing
 %%
 is_authorized(Req, State = #state{options = Opts}) ->
   case cowboy_req:parse_header(<<"authorization">>, Req) of
@@ -102,7 +104,8 @@ is_authorized(Req, State = #state{options = Opts}) ->
   end.
 
 %%
-%% This checks State#state.auth to see whether user is authorized.
+%% Checks user is authorized to access the resource.
+%% NB: Should be with respect to HTTP method.
 %%
 forbidden(Req, State = #state{handler = Handler}) ->
   case Handler:authorize(State) of
@@ -319,64 +322,3 @@ urlencode([{K, V} | T], <<>>) ->
 urlencode([{K, V} | T], Acc) ->
   urlencode(T, << Acc/binary, $&,
     (urlencode(K))/binary, $=, (urlencode(V))/binary >>).
-
-%%
-%% -----------------------------------------------------------------------------
-%% Application handlers.
-%% -----------------------------------------------------------------------------
-%%
-
-%%
-%% Check access to resource.
-%%
--spec authorize(State :: tuple()) ->
-    {ok, State2 :: tuple()} |
-    error.
-authorize(State = #state{auth = _Auth}) ->
-pecypc_log:info({auth, State}),
-  {ok, State}.
-
-%%
-%% Get resource. Returns raw term which will be serialized according to conneg.
-%%
--spec get(State :: tuple()) ->
-    {ok, Result :: term()} |
-    error |
-    {error, Reason :: term()}.
-get(State = #state{options = Opts}) ->
-pecypc_log:info({get, State}),
-  {_, {Secret, _}} = lists:keyfind(security, 1, Opts),
-  % {ok, [null, <<"GOT">>, 123]}.
-  {ok, [{bearer, termit:encode_base64({user, <<"dvv">>}, Secret)}]}.
-
-%%
-%% Put or update resource, depending on method in State.
-%% NB: In the future, all requests with body will be routed here.
-%% May return raw term which will be serialized according to conneg.
-%%
--spec put(State :: tuple()) ->
-    ok |
-    {ok, Result :: term()} |
-    {new, Location :: binary()} |
-    error |
-    {error, Reason :: term()}.
-put(State) ->
-pecypc_log:info({put, State}),
-  % ok.
-  % {ok, <<"PUT">>}.
-  % {new, <<"foo">>}.
-  {error, <<"PUT">>}.
-
-%%
-%% Start resource removal.
-%% May return raw term which will be serialized according to conneg.
-%%
--spec delete(State :: tuple()) ->
-    ok |
-    accepted |
-    error |
-    {error, Reason :: term()}.
-delete(State) ->
-pecypc_log:info({delete, State}),
-  {error, [{foo, <<"bar">>}]}.
-  % {error, bar}.

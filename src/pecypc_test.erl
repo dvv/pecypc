@@ -16,38 +16,35 @@
 %% -----------------------------------------------------------------------------
 %%
 
-%%
-%% Check access to resource.
-%%
-authorize(State = #state{auth = _Auth}) ->
+authorize(State = #state{auth = _Auth, params = Params}) ->
 pecypc_log:info({auth, State}),
-  {ok, State}.
+  case lists:keyfind(bucket, 1, Params) of
+    {_, <<"dvv">>} ->
+      {ok, State};
+    _ ->
+      error
+  end.
 
-%%
-%% Get resource. Returns raw term which will be serialized according to conneg.
-%%
 get(State = #state{options = Opts}) ->
 pecypc_log:info({get, State}),
   {_, {Secret, _}} = lists:keyfind(security, 1, Opts),
   % {ok, [null, <<"GOT">>, 123]}.
   {ok, [{bearer, termit:encode_base64({user, <<"dvv">>}, Secret)}]}.
 
-%%
-%% Put or update resource, depending on method in State.
-%% NB: In the future, all requests with body will be routed here.
-%% May return raw term which will be serialized according to conneg.
-%%
-put(State) ->
+put(State = #state{options = Opts}) ->
 pecypc_log:info({put, State}),
   % ok.
   % {ok, <<"PUT">>}.
   % {new, <<"foo">>}.
-  {error, <<"PUT">>}.
+  % {error, <<"PUT">>}.
+  {_, {Secret, _}} = lists:keyfind(security, 1, Opts),
+  {ok, [{bearer, termit:encode_base64([
+      {user, <<"dvv">>},
+      {acl, [
+        <<"api">>, <<"dvv">>
+      ]}
+    ], Secret)}]}.
 
-%%
-%% Start resource removal.
-%% May return raw term which will be serialized according to conneg.
-%%
 delete(State) ->
 pecypc_log:info({delete, State}),
   {error, [{foo, <<"bar">>}]}.

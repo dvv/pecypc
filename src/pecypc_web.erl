@@ -80,22 +80,25 @@ protocol() -> [
   {env, [
     {session_opts, pecypc_app:key(session_opts)},
     % dispatch rules
-    {dispatch, cowboy_router:compile([{'_', routes()}])}
+    {dispatch, dispatch()}
   ]}
 ].
 
+dispatch() ->
+  cowboy_router:compile([{'_', routes()}]).
+
 routes() -> [
-  {"/api", pecypc_api, [
+  {"/api/:bucket", pecypc_api, [
     {handler, pecypc_test},
     {security, pecypc_app:key(bearer_opts)},
-    {allow, [<<"GET">>, <<"PUT">>, <<"DELETE">>, <<"PATCH">>, <<"HEAD">>]}
-  ]},
+    {allow, [<<"GET">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>, <<"HEAD">>]}
+  ]}%,
 
-  % static content: /* -> /priv/html/*
-  {"/[...]", cowboy_static, [
-    %{directory, "priv/www"},
-    {directory, {priv_dir, pecypc, [<<"www">>]}},
-    % @todo get rid of gen_server-ish mimetypes
-    {mimetypes, { {mimetypes, path_to_mimes}, default} }
-  ]}
+  % % static content: /* -> /priv/html/*
+  % {"/[...]", cowboy_static, [
+  %   %{directory, "priv/www"},
+  %   {directory, {priv_dir, pecypc, [<<"www">>]}},
+  %   % @todo get rid of gen_server-ish mimetypes
+  %   {mimetypes, { {mimetypes, path_to_mimes}, default} }
+  % ]}
 ].
