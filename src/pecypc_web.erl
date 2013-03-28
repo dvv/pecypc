@@ -88,7 +88,7 @@ dispatch() ->
   cowboy_router:compile([{'_', routes()}]).
 
 routes() -> [
-  {"/api/:bucket", pecypc_api, [
+  {"/api/:bucket", cowboy_social_provider, [
     {handler, pecypc_test},
     {security, pecypc_app:key(bearer_opts)},
     {allow, [<<"GET">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>, <<"HEAD">>]}
@@ -99,7 +99,7 @@ routes() -> [
     {token_secret, <<"!cowboyftw!">>},
     {token_ttl, 20},
     {refresh_secret, <<"@cowboyftw@">>},
-    {refresh_ttl, 30}
+    {refresh_ttl, 60}
   ]}%,
 
   % % static content: /* -> /priv/html/*
