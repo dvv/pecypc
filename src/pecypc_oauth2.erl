@@ -120,6 +120,10 @@ check_scope(Req, State = #state{client_id = ClientId}) ->
 %% @todo this route per se must be accessible by authenticated resourse owners!
 %%
 
+%%
+%% @todo no-cache for these two
+%%
+
 authorization_decision(Req, State = #state{response_type = <<"code">>,
     client_id = ClientId, redirect_uri = RedirectUri,
     scope = Scope, opaque = Opaque,
@@ -153,7 +157,7 @@ authorization_decision(Req, State = #state{response_type = <<"token">>,
   case authorize_client_credentials(ClientId, implicit, Scope) of
     {ok, Identity, Scope2} ->
       % respond with form containing token
-      Token = token({Identity, Scope2}, Opts),
+      Token = token({Identity, Scope2}, Scope2, Opts),
       TokenBin = urlencode(Token),
       {<<
           "<p>Client: \"", ClientId/binary, "\" asks permission for scope:\"", Scope2/binary, "\"</p>",
@@ -177,7 +181,9 @@ authorization_decision(Req, State = #state{response_type = <<"token">>,
 %% no redirect_uri is known or it's invalid -> respond with error
 fail(Req, State = #state{data = Error, redirect_uri = undefined}) ->
   {ok, Req2} = cowboy_req:reply(400, [
-      {<<"content-type">>, <<"application/json; charset=UTF-8">>}
+      {<<"content-type">>, <<"application/json; charset=UTF-8">>},
+      {<<"cache-control">>, <<"no-store">>},
+      {<<"pragma">>, <<"no-cache">>}
     ], jsx:encode([{error, Error}]), Req),
   {halt, Req2, State};
 %% redirect_uri is valid -> pass error to redirect_uri as fragment
@@ -189,7 +195,9 @@ fail(Req, State = #state{data = Error, response_type = <<"token">>,
             (urlencode([
                 {error, Error},
                 {state, Opaque}
-              ]))/binary >>}
+              ]))/binary >>},
+      {<<"cache-control">>, <<"no-store">>},
+      {<<"pragma">>, <<"no-cache">>}
     ], <<>>, Req),
   {halt, Req2, State};
 %% redirect_uri is valid -> pass error to redirect_uri as querystring
@@ -201,7 +209,9 @@ fail(Req, State = #state{data = Error,
             (urlencode([
                 {error, Error},
                 {state, Opaque}
-              ]))/binary >>}
+              ]))/binary >>},
+      {<<"cache-control">>, <<"no-store">>},
+      {<<"pragma">>, <<"no-cache">>}
     ], <<>>, Req),
   {halt, Req2, State}.
 
@@ -221,27 +231,29 @@ put_json(Req, State) ->
     {incomplete, _} ->
       {false, Req2, State};
     Data ->
-      request_access_token(Req2, State#state{data = Data})
+      request_token(Req2, State#state{data = Data})
   end.
 
 put_form(Req, State) ->
   {ok, Data, Req2} = cowboy_req:body_qs(Req),
-  request_access_token(Req2, State#state{data = Data}).
+  request_token(Req2, State#state{data = Data}).
 
-request_access_token(Req, State = #state{data = Data}) ->
-  try
+request_token(Req, State = #state{data = Data}) ->
+  % try
     case lists:keyfind(<<"grant_type">>, 1, Data) of
       {_, <<"authorization_code">>} ->
         authorization_code_flow_stage2(Req, State);
+      {_, <<"refresh_token">>} ->
+        refresh_token(Req, State);
       {_, <<"password">>} ->
         password_credentials_flow(Req, State);
       {_, <<"client_credentials">>} ->
         client_credentials_flow(Req, State);
       _ ->
         fail(Req, State#state{data = <<"unsupported_grant_type">>})
-    end
-  catch _:_ ->
-    fail(Req, State#state{data = <<"invalid_request">>})
+    % end
+  % catch _:_ ->
+    % fail(Req, State#state{data = <<"invalid_request">>})
   end.
 
 %%------------------------------------------------------------------------------
@@ -269,12 +281,27 @@ authorization_code_flow_stage2(Req, State = #state{
       case authorize_client_credentials(ClientId, ClientSecret, Scope) of
         {ok, Identity, Scope2} ->
           % respond with token
-          issue_token(Req, State, {Identity, Scope2}, Opts);
+          issue_token(Req, State, {Identity, Scope2}, Scope2, Opts);
         {error, scope} ->
           fail(Req, State#state{data = <<"invalid_scope">>});
         {error, _} ->
           fail(Req, State#state{data = <<"unauthorized_client">>})
       end;
+    {error, _} ->
+      fail(Req, State#state{data = <<"invalid_grant">>})
+  end.
+
+%%
+%% Refresh an access token.
+%%
+refresh_token(Req, State = #state{data = Data, options = Opts}) ->
+  case termit:decode_base64(
+      key(<<"refresh_token">>, Data),
+      key(refresh_secret, Opts),
+      key(refresh_ttl, Opts))
+  of
+    {ok, {Identity, Scope}} ->
+      issue_token(Req, State, {Identity, Scope}, Scope, Opts);
     {error, _} ->
       fail(Req, State#state{data = <<"invalid_grant">>})
   end.
@@ -292,7 +319,7 @@ password_credentials_flow(Req, State = #state{
       key(<<"scope">>, Data))
   of
     {ok, Identity, Scope} ->
-      issue_token(Req, State, {Identity, Scope}, Opts);
+      issue_token(Req, State, {Identity, Scope}, Scope, Opts);
     {error, scope} ->
       fail(Req, State#state{data = <<"invalid_scope">>});
     {error, _} ->
@@ -312,7 +339,7 @@ client_credentials_flow(Req, State = #state{
       key(<<"scope">>, Data))
   of
     {ok, Identity, Scope} ->
-      issue_token(Req, State, {Identity, Scope}, Opts);
+      issue_token(Req, State, {Identity, Scope}, Scope, Opts);
     {error, scope} ->
       fail(Req, State#state{data = <<"invalid_scope">>});
     {error, _} ->
@@ -322,18 +349,23 @@ client_credentials_flow(Req, State = #state{
 %%
 %% Respond with access token.
 %%
-issue_token(Req, State, Context, Opts) ->
+issue_token(Req, State, Context, Scope, Opts) ->
   {ok, Req2} = cowboy_req:reply(200, [
-      {<<"content-type">>, <<"application/json; charset=UTF-8">>}
-    ], jsx:encode(token(Context, Opts)), Req),
+      {<<"content-type">>, <<"application/json; charset=UTF-8">>},
+      {<<"cache-control">>, <<"no-store">>},
+      {<<"pragma">>, <<"no-cache">>}
+    ], jsx:encode(token(Context, Scope, Opts)), Req),
   {halt, Req2, State}.
 
-token(Data, Opts) ->
-  Token = termit:encode_base64(Data, key(token_secret, Opts)),
+token(Data, Scope, Opts) ->
+  AccessToken = termit:encode_base64(Data, key(token_secret, Opts)),
+  RefreshToken = termit:encode_base64(Data, key(refresh_secret, Opts)),
   [
-      {access_token, Token},
+      {access_token, AccessToken},
       {token_type, <<"Bearer">>},
-      {expires_in, key(token_ttl, Opts)}
+      {expires_in, key(token_ttl, Opts)},
+      {scope, Scope},
+      {refresh_token, RefreshToken}
     ].
 
 %%

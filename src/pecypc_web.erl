@@ -95,9 +95,11 @@ routes() -> [
   ]},
   {"/oauth2", pecypc_oauth2, [
     {code_secret, <<"?cowboyftw?">>},
-    {code_ttl, 180},
+    {code_ttl, 60},
     {token_secret, <<"!cowboyftw!">>},
-    {token_ttl, 3600}
+    {token_ttl, 20},
+    {refresh_secret, <<"@cowboyftw@">>},
+    {refresh_ttl, 30}
   ]}%,
 
   % % static content: /* -> /priv/html/*
