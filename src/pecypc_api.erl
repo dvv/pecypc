@@ -21,7 +21,7 @@
     options/2,
     content_types_accepted/2,
     content_types_provided/2,
-    process_post/2,
+    post_is_create/2,
     delete_resource/2,
     delete_completed/2
   ]).
@@ -173,7 +173,13 @@ get_resource(Req, State = #state{handler = Handler}) ->
   end.
 
 %%
-%% NB: these handlers is also called on PATCH and in the future will be on POST.
+%% Route POST to put_*.
+%%
+post_is_create(Req, State) ->
+  {true, Req, State}.
+
+%%
+%% NB: these handlers is also called on PATCH and POST.
 %%
 %% - {false, Req, State} --> 422 Unprocessable Entity
 %% - {true, Req, State} --> 204 No Content
@@ -256,16 +262,6 @@ delete_resource(Req, State = #state{handler = Handler}) ->
 %%
 delete_completed(Req, State = #state{completed = Completed}) ->
   {Completed, Req, State}.
-
-%%
-%% NB: must be defined if POST in allowed methods, or 500 Internal Server Error
-%% This is free style handler. AFAICS no conneg is done.
-%% - {true, Req, State} --> same as after PUT
-%% - {X =/= true, Req, State} --> 500 Internal Server Error
-%% - {halt, Req, State} --> no further processing
-%%
-process_post(Req, State) ->
-  {true, Req, State}.
 
 %%
 %% -----------------------------------------------------------------------------
