@@ -37,19 +37,11 @@
     redirect_uri,
     scope,
     opaque,
-    response_type,
-    code
+    response_type
   }).
 
 init(_Transport, Req, Opts) ->
-  % apply apigen pragmatic REST recommendations
-  Req2 = cowboy_patch:patch_pragmatic_rest(
-       cowboy_patch:patch_method(
-       cowboy_patch:patch_headers(Req))),
-  % go rest
-  {upgrade, protocol, cowboy_rest, Req2, #state{
-      options = Opts
-    }}.
+  {upgrade, protocol, cowboy_rest, Req, #state{options = Opts}}.
 
 terminate(_Reason, _Req, _State) ->
   ok.
@@ -123,6 +115,10 @@ check_scope(Req, State = #state{client_id = ClientId}) ->
 %%------------------------------------------------------------------------------
 %% Authorization Response
 %%------------------------------------------------------------------------------
+
+%%
+%% @todo this route per se must be accessible by authenticated resourse owners!
+%%
 
 authorization_decision(Req, State = #state{response_type = <<"code">>,
     client_id = ClientId, redirect_uri = RedirectUri,
@@ -238,7 +234,7 @@ request_access_token(Req, State = #state{data = Data}) ->
       {_, <<"authorization_code">>} ->
         authorization_code_flow_stage2(Req, State);
       {_, <<"password">>} ->
-        resource_owner_password_credentials_flow(Req, State);
+        password_credentials_flow(Req, State);
       {_, <<"client_credentials">>} ->
         client_credentials_flow(Req, State);
       _ ->
@@ -286,7 +282,7 @@ authorization_code_flow_stage2(Req, State = #state{
 %%
 %% Request access token for a resource owner.
 %%
-resource_owner_password_credentials_flow(Req, State = #state{
+password_credentials_flow(Req, State = #state{
     data = Data, options = Opts
   }) ->
   % @todo ensure scheme is https
@@ -350,23 +346,25 @@ key(Key, List) ->
   {_, Value} = lists:keyfind(Key, 1, List),
   Value.
 
-urlencode(undefined) ->
-  <<>>;
 urlencode(Bin) when is_binary(Bin) ->
   cowboy_http:urlencode(Bin);
 urlencode(Atom) when is_atom(Atom) ->
   urlencode(atom_to_binary(Atom, latin1));
 urlencode(Int) when is_integer(Int) ->
   urlencode(list_to_binary(integer_to_list(Int)));
+urlencode({K, undefined}) ->
+  << (urlencode(K))/binary, $= >>;
+urlencode({K, V}) ->
+  << (urlencode(K))/binary, $=, (urlencode(V))/binary >>;
 urlencode(List) when is_list(List) ->
-  urlencode(List, <<>>).
-urlencode([], Acc) ->
-  Acc;
-urlencode([{K, V} | T], <<>>) ->
-  urlencode(T, << (urlencode(K))/binary, $=, (urlencode(V))/binary >>);
-urlencode([{K, V} | T], Acc) ->
-  urlencode(T, << Acc/binary, $&,
-    (urlencode(K))/binary, $=, (urlencode(V))/binary >>).
+  binary_join(List, $&).
+
+binary_join([], _Sep) ->
+  <<>>;
+binary_join([H], _Sep) ->
+  << H/binary >>;
+binary_join([H | T], Sep) ->
+  << H/binary, Sep/binary, (binary_join(T, Sep))/binary >>.
 
 %%
 %%------------------------------------------------------------------------------
