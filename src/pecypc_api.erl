@@ -164,6 +164,8 @@ get_resource(Req, State = #state{handler = Handler}) ->
   case Handler:get(State) of
     {ok, Result} ->
       {serialize(Result, Req), Req, State};
+    {goto, Location} ->
+      {halt, cowboy_req:set_resp_header(<<"location">>, Location, Req), State};
     error ->
       {halt, respond(400, undefined, Req), State};
     {error, Reason} ->
@@ -215,7 +217,7 @@ put_resource(Req, State = #state{handler = Handler}) ->
     {ok, Body} ->
       {true, set_resp_body(Body, Req), State};
     % @todo process_put/2 should not know about HTTP terms like "location" etc.
-    {new, Location} ->
+    {goto, Location} ->
       {true, cowboy_req:set_resp_header(<<"location">>, Location, Req), State};
     error ->
       {halt, respond(400, undefined, Req), State};

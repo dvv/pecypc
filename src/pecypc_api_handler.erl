@@ -16,13 +16,14 @@
 
 -callback get(State :: state()) ->
     {ok, Result :: result()} |
+    {goto, Where :: binary()} |
     error |
     {error, Reason :: error()}.
 
 -callback put(State :: state()) ->
     ok |
     {ok, Result :: result()} |
-    {new, Location :: binary()} |
+    {goto, Where :: binary()} |
     error |
     {error, Reason :: error()}.
 

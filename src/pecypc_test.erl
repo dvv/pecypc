@@ -1,6 +1,6 @@
 -module(pecypc_test).
--behaviour(pecypc_api_handler).
 
+-behaviour(pecypc_api_handler).
 -export([
     authorize/1,
     get/1,

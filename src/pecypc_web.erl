@@ -92,6 +92,12 @@ routes() -> [
     {handler, pecypc_test},
     {security, pecypc_app:key(bearer_opts)},
     {allow, [<<"GET">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>, <<"HEAD">>]}
+  ]},
+  {"/oauth2", pecypc_oauth2, [
+    {code_secret, <<"?cowboyftw?">>},
+    {code_ttl, 180},
+    {token_secret, <<"!cowboyftw!">>},
+    {token_ttl, 3600}
   ]}%,
 
   % % static content: /* -> /priv/html/*
