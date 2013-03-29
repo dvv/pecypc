@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width">
+  <title>Playing with Angular</title>
+  <meta name="description" content="">
+  <meta name="author" content="">
+  <link rel="stylesheet" href="//netdna.bootstrapcdn.com/twitter-bootstrap/2.3.1/css/bootstrap.min.css">
+  <link rel="stylesheet" href="style.css">
+  <script>document.write('<base href="' + document.location + '" />');</script>
+</head>
+
+<body ng-app="oauth2" ng-controller="MainCtrl">
+  <a href="" ng-click="login('native')">Via Native provider</a><br />
+  <a href="" ng-click="login('facebook')">Via Facebook</a><br />
+  <a href="" ng-click="login('github')">Via Github</a><br />
+  <a href="" ng-click="login('google')">Via Google</a><br />
+  <a href="" ng-click="login('mailru')">Via MailRu</a><br />
+  <a href="" ng-click="login('paypal')">Via PayPal</a><br />
+  <a href="" ng-click="login('vkontakte')">Via Vkontakte</a><br />
+  <a href="" ng-click="login('yandex')">Via Yandex</a><br />
+
+  <h1>Hello {{ profile.name }}</h1>
+  <img ng-src="{{ profile.picture }}" /><br />
+  Provider: <input ng-model="profile.provider" /><br />
+  UID: <input ng-model="profile.id" /><br />
+  Name: <input ng-model="profile.name" /><br />
+  Email: <input ng-model="profile.email" /><br />
+  Gender: <input ng-model="profile.gender" /><br />
+  Locale: <input ng-model="profile.locale" /><br />
+  <hr />
+  {{ profile.raw | json }}
+
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.1.3/angular.min.js"></script>
+  <script src="//netdna.bootstrapcdn.com/twitter-bootstrap/2.3.1/js/bootstrap.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

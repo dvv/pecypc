@@ -93,20 +93,28 @@ routes() -> [
     {security, pecypc_app:key(bearer_opts)},
     {allow, [<<"GET">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>, <<"HEAD">>]}
   ]},
-  {"/oauth2", pecypc_oauth2, [
+
+  % oauth2 server
+  {"/oauth2", cowboy_social_provider, [
     {code_secret, <<"?cowboyftw?">>},
     {code_ttl, 60},
     {token_secret, <<"!cowboyftw!">>},
     {token_ttl, 20},
     {refresh_secret, <<"@cowboyftw@">>},
     {refresh_ttl, 60}
-  ]}%,
+  ]},
 
-  % % static content: /* -> /priv/html/*
-  % {"/[...]", cowboy_static, [
-  %   %{directory, "priv/www"},
-  %   {directory, {priv_dir, pecypc, [<<"www">>]}},
-  %   % @todo get rid of gen_server-ish mimetypes
-  %   {mimetypes, { {mimetypes, path_to_mimes}, default} }
-  % ]}
+  % oauth2 client helper
+  {"/auth/:provider/[:action]", cowboy_social,
+      pecypc_app:key(social_providers)},
+  {"/api/:provider/:action", cowboy_social_profile,
+      pecypc_app:key(social_providers)},
+
+  % static content: /* -> /priv/html/*
+  {"/[...]", cowboy_static, [
+    %{directory, "priv/www"},
+    {directory, {priv_dir, pecypc, [<<"www">>]}},
+    % @todo get rid of gen_server-ish mimetypes
+    {mimetypes, { {mimetypes, path_to_mimes}, default} }
+  ]}
 ].
