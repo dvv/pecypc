@@ -32,8 +32,6 @@ reload() ->
 %% -----------------------------------------------------------------------------
 
 config() ->
-  % read app configuration
-  Config = pecypc_app:config(),
   % transport options
   TransOpts = transport(),
   % NB: honor heroku environment
@@ -51,7 +49,7 @@ config() ->
   end,
   % protocol options
   ProtoOpts = protocol(),
-  pecypc_log:info({proto, ProtoOpts}),
+% pecypc_log:info({proto, ProtoOpts}),
   {ok, TransOpts3, ProtoOpts}.
 
 transport() -> [
@@ -85,30 +83,32 @@ protocol() -> [
 ].
 
 dispatch() ->
-  cowboy_router:compile([{'_', routes()}]).
+  cowboy_router:compile([{'_', lists:flatten(routes())}]).
 
 routes() -> [
-  {"/api/:bucket", cowboy_social_provider, [
+  {"/api/:bucket[/:id]", pecypc_api, [
     {handler, pecypc_test},
-    {security, pecypc_app:key(bearer_opts)},
-    {allow, [<<"GET">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>, <<"HEAD">>]}
+    {security, {<<"!cowboyftw!">>, 86400}},
+    {allow, [<<"GET">>, <<"POST">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>, <<"HEAD">>]}
   ]},
 
   % oauth2 server
-  {"/oauth2", cowboy_social_provider, [
+  {"/oauth2", oauth2_provider, [
+    {backend, pecypc_test},
     {code_secret, <<"?cowboyftw?">>},
     {code_ttl, 60},
     {token_secret, <<"!cowboyftw!">>},
-    {token_ttl, 20},
+    {token_ttl, 3600},
     {refresh_secret, <<"@cowboyftw@">>},
-    {refresh_ttl, 60}
+    {refresh_ttl, 86400}
   ]},
 
   % oauth2 client helper
-  {"/auth/:provider/[:action]", cowboy_social,
-      pecypc_app:key(social_providers)},
-  {"/api/:provider/:action", cowboy_social_profile,
-      pecypc_app:key(social_providers)},
+  [{"/auth/" ++ atom_to_list(P) ++ "/:action", cowboy_social, O}
+        || {P, O} <- pecypc_app:key(social_providers)],
+  % oauth2 profile helper
+  [{"/api/" ++ atom_to_list(P) ++ "/:action", cowboy_social_profile, [{provider, P} | O]}
+        || {P, O} <- pecypc_app:key(social_providers)],
 
   % static content: /* -> /priv/html/*
   {"/[...]", cowboy_static, [

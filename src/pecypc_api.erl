@@ -21,7 +21,9 @@
     options/2,
     content_types_accepted/2,
     content_types_provided/2,
-    post_is_create/2,
+    % post_is_create/2,
+    % created_path/2,
+    process_post/2,
     delete_resource/2,
     delete_completed/2
   ]).
@@ -40,14 +42,19 @@
 -include("pecypc_api.hrl").
 
 init(_Transport, Req, Opts) ->
-  % apply apigen pragmatic REST recommendations
-pecypc_log:info(cowboy_req:to_list(Req)),
-  Req2 = cowboy_patch:patch_pragmatic_rest(
-       cowboy_patch:patch_method(
-       cowboy_patch:patch_headers(Req))),
+  Req2 = case lists:keyfind(patch, 1, Opts) of
+    {_, true} ->
+      % apply apigen pragmatic REST recommendations
+      cowboy_patch:patch_pragmatic_rest(
+           cowboy_patch:patch_method(
+           cowboy_patch:patch_headers(Req)));
+    false ->
+      Req
+  end,
   % extract request info
   {Params, Req3} = cowboy_req:bindings(Req2),
   {Query, Req4} = cowboy_req:qs_vals(Req3),
+  %lists:ukeymerge(1, lists:ukeysort(1, Params), lists:ukeysort(1, Query)),
   {Method, Req5} = cowboy_req:method(Req4),
   % extract options
   {_, Handler} = lists:keyfind(handler, 1, Opts),
@@ -160,8 +167,9 @@ content_types_provided(Req, State) ->
 %% - {Body, Req, State} --> 200 OK
 %% - {halt, Req, State} --> no further processing
 %%
-get_resource(Req, State = #state{handler = Handler}) ->
-  case Handler:get(State) of
+get_resource(Req, State = #state{
+    query = Query, handler = Handler, options = Opts}) ->
+  case Handler:get(Query, Opts) of
     {ok, Result} ->
       {serialize(Result, Req), Req, State};
     {goto, Location} ->
@@ -175,8 +183,21 @@ get_resource(Req, State = #state{handler = Handler}) ->
 %%
 %% Route POST to put_*.
 %%
-post_is_create(Req, State) ->
-  {true, Req, State}.
+% post_is_create(Req, State) ->
+%   {true, Req, State}.
+
+% created_path(Req, State) ->
+%   {<<>>, Req, State}.
+
+process_post(Req, State) ->
+  case put_json(Req, State) of
+    % mimic PUT's behaviour on false response
+    {false, Req2, State2} ->
+      {ok, Req3} = cowboy_req:reply(422, Req2),
+      {halt, Req3, State2};
+    Else ->
+      Else
+  end.
 
 %%
 %% NB: these handlers is also called on PATCH and POST.
@@ -211,13 +232,26 @@ put_form(Req, State) ->
 %%
 
 %%
+%% POST is used for free-style RPC.
+%% Take batch of requests from body, returns batch of responses.
+%% Requests processing delegated to application's handle(Method, [Args]).
+%%
+%% Request is either triplet array: [Method, Params, Id]
+%%   or duplet array: [Method, Params].
+%% Response is triplet array: [null, Result, Id] | [Error, null, Id].
+%% If Id is not set in request, corresponding response is null.
+%%
+put_resource(Req, State = #state{method = <<"POST">>,
+    body = Batch, handler = Handler}) ->
+  {true, set_resp_body(batch_rpc(Batch, Handler), Req), State};
+
+%%
 %% Delegates actual processing to application's put/2.
 %% Encodes possible response entity.
 %%
-put_resource(Req, State = #state{handler = Handler}) ->
-% pecypc_log:info(cowboy_req:to_list(Req)),
-  % @todo honor pragmatic rest switches to include body in the response etc.
-  case Handler:put(State) of
+put_resource(Req, State = #state{
+    query = Query, body = Data, handler = Handler, options = Opts}) ->
+  case Handler:put(Data, [{query, Query} | Opts]) of
     ok ->
       {true, Req, State};
     {ok, Body} ->
@@ -242,8 +276,9 @@ put_resource(Req, State = #state{handler = Handler}) ->
 %% - {X =/= true, Req, State} --> 500 Internal Server Error
 %% - {halt, Req, State} --> no further processing
 %%
-delete_resource(Req, State = #state{handler = Handler}) ->
-  case Handler:delete(State) of
+delete_resource(Req, State = #state{
+    query = Query, handler = Handler, options = Opts}) ->
+  case Handler:delete(Query, Opts) of
     ok ->
       {true, Req, State#state{completed = true}};
     accepted ->
@@ -264,14 +299,46 @@ delete_completed(Req, State = #state{completed = Completed}) ->
   {Completed, Req, State}.
 
 %%
+%%------------------------------------------------------------------------------
+%% RPC functions
+%%------------------------------------------------------------------------------
+%%
+
+batch_rpc(Batch, Handler) ->
+  [
+    try rpc_reply(apply(Handler, handle, [Method, Params]), Id) of
+      Any -> Any
+    catch
+      _:function_clause ->
+        [<<"enoent">>, null, Id];
+      _:badarg ->
+        [<<"einval">>, null, Id];
+      _:badarith ->
+        [<<"einval">>, null, Id];
+      % @fixme this is defensive programming
+      _:Exception ->
+        [atom_to_binary(Exception, latin1), null, Id]
+    end || [Method, Params, Id] <- Batch
+  ].
+
+rpc_reply(_, null) ->
+  null;
+rpc_reply({ok, Result}, Id) ->
+  [null, Result, Id];
+rpc_reply({error, Reason}, Id) when is_atom(Reason) ->
+  [atom_to_binary(Reason, latin1), null, Id];
+rpc_reply({error, Reason}, Id) when
+    is_binary(Reason); is_number(Reason); is_boolean(Reason) ->
+  [Reason, null, Id].
+
+%%
 %% -----------------------------------------------------------------------------
 %% Helpers
 %% -----------------------------------------------------------------------------
 %%
 
 respond(Status, Reason, Req) ->
-  {ok, Req2} = cowboy_req:reply(Status,
-        set_resp_body(reason(Reason), Req)),
+  {ok, Req2} = cowboy_req:reply(Status, set_resp_body(reason(Reason), Req)),
   Req2.
 
 set_resp_body(Body, Req) ->
@@ -311,12 +378,18 @@ urlencode(Bin) when is_binary(Bin) ->
   cowboy_http:urlencode(Bin);
 urlencode(Atom) when is_atom(Atom) ->
   urlencode(atom_to_binary(Atom, latin1));
+urlencode(Int) when is_integer(Int) ->
+  urlencode(list_to_binary(integer_to_list(Int)));
+urlencode({K, undefined}) ->
+  << (urlencode(K))/binary, $= >>;
+urlencode({K, V}) ->
+  << (urlencode(K))/binary, $=, (urlencode(V))/binary >>;
 urlencode(List) when is_list(List) ->
-  urlencode(List, <<>>).
-urlencode([], Acc) ->
-  Acc;
-urlencode([{K, V} | T], <<>>) ->
-  urlencode(T, << (urlencode(K))/binary, $=, (urlencode(V))/binary >>);
-urlencode([{K, V} | T], Acc) ->
-  urlencode(T, << Acc/binary, $&,
-    (urlencode(K))/binary, $=, (urlencode(V))/binary >>).
+  binary_join([urlencode(X) || X <- List], << $& >>).
+
+binary_join([], _Sep) ->
+  <<>>;
+binary_join([H], _Sep) ->
+  << H/binary >>;
+binary_join([H | T], Sep) ->
+  << H/binary, Sep/binary, (binary_join(T, Sep))/binary >>.

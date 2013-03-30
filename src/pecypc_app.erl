@@ -4,7 +4,7 @@
 -behaviour(application).
 -export([start/0, start/2, stop/1]).
 
--export([config/0, key/1, key/2]).
+-export([key/1, key/2]).
 
 %% -----------------------------------------------------------------------------
 %% Application starter, ensures dependencies are started.
@@ -50,7 +50,7 @@ stop(_State) ->
 
 config() ->
   {ok, Cwd} = file:get_cwd(),
-  {ok, Config} = file:consult(Cwd ++ "/priv/app.config"),
+  {ok, Config} = file:consult(Cwd ++ "/app.config"),
   Config.
 
 key(Key) ->

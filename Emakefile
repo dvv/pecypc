@@ -4,6 +4,7 @@
 {"deps/jsx/src/*", [debug_info, {outdir, "deps/jsx/ebin"}, {i, "deps/jsx/src"}, {i, "deps/jsx/include"}]}.
 {"deps/mimetypes/src/*", [debug_info, {outdir, "deps/mimetypes/ebin"}, {i, "deps/mimetypes/src"}, {i, "deps/mimetypes/include"}]}.
 {"deps/ranch/src/*", [debug_info, {outdir, "deps/ranch/ebin"}, {i, "deps/ranch/src"}, {i, "deps/ranch/include"}]}.
+{"deps/saddle/src/*", [debug_info, {outdir, "deps/saddle/ebin"}, {i, "deps/saddle/src"}, {i, "deps/saddle/include"}]}.
 {"deps/social/src/*", [debug_info, {outdir, "deps/social/ebin"}, {i, "deps/social/src"}, {i, "deps/social/include"}]}.
 {"deps/stable/src/*", [debug_info, {outdir, "deps/stable/ebin"}, {i, "deps/stable/src"}, {i, "deps/stable/include"}]}.
 {"deps/termit/src/*", [debug_info, {outdir, "deps/termit/ebin"}, {i, "deps/termit/src"}, {i, "deps/termit/include"}]}.

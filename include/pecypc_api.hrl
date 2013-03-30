@@ -4,7 +4,7 @@
     body,
     query,
     auth,
-    completed :: boolean,
+    completed = false :: boolean(),
     options,
     handler :: module()
   }).
