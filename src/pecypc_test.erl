@@ -2,10 +2,9 @@
 
 -behaviour(pecypc_api_handler).
 -export([
-    authorize/1,
+    delete/2,
     get/2,
-    put/2,
-    delete/2
+    put/3
   ]).
 
 % backend
@@ -15,7 +14,7 @@
     authorize_username_password/3
   ]).
 
--export([handle/2]).
+-export([handle/3]).
 
 -include("pecypc_api.hrl").
 
@@ -25,44 +24,40 @@
 %% -----------------------------------------------------------------------------
 %%
 
-handle(<<"get">>, [Q, O]) ->
-  get(Q, O);
-handle(<<"add">>, [X, Y]) ->
-pecypc_log:info({add, X, Y}),
-  {ok, X + Y}.
-
-authorize(State = #state{auth = _Auth, params = Params}) ->
-pecypc_log:info({auth, State}),
-  case lists:keyfind(bucket, 1, Params) of
-    {_, <<"dvv">>} ->
-      {ok, State};
-    _ ->
-      error
-  end.
-
-get(Query, Opts) ->
-pecypc_log:info({get, Query, Opts}),
+get(Q, O) ->
+pecypc_log:info({get, Q, O}),
   {ok, <<"GOT">>}.
 
-%% @todo distinguish POST -> RPC, PUT -> new, PATCH -> update
-put(Body, Opts) ->
-pecypc_log:info({put, Body, Opts}),
+put(B, Q, O) ->
+pecypc_log:info({put, B, Q, O}),
   % ok.
   % {ok, <<"PUT">>}.
   % {new, <<"foo">>}.
   % {error, <<"PUT">>}.
-  {_, {Secret, _}} = lists:keyfind(security, 1, Opts),
-  {ok, [{bearer, termit:encode_base64([
-      {user, <<"dvv">>},
-      {acl, [
-        <<"api">>, <<"dvv">>
-      ]}
-    ], Secret)}]}.
+  {_, {Secret, _}} = lists:keyfind(security, 1, O),
+  {ok, [{bearer, termit:encode_base64({{user, <<"dvv">>}, [
+        <<"admin.add">>, <<"admin.PUT">>, <<"admin.GET">>
+      ]}, Secret)}]}.
 
-delete(Query, Opts) ->
-pecypc_log:info({delete, Query, Opts}),
+delete(Q, O) ->
+pecypc_log:info({delete, Q, O}),
   {error, [{foo, <<"bar">>}]}.
-  % {error, bar}.
+
+handle(<<"GET">>, [Q], O) ->
+  get(Q, O);
+
+handle(<<"PUT">>, [B, Q], O) ->
+  put(B, Q, O);
+
+handle(<<"PATCH">>, [B, Q], O) ->
+  put(B, Q, O);
+
+handle(<<"DELETE">>, [Q], O) ->
+  delete(Q, O);
+
+handle(<<"add">>, [X, Y], _O) ->
+pecypc_log:info({add, X, Y}),
+  {ok, X + Y}.
 
 %%
 %%------------------------------------------------------------------------------

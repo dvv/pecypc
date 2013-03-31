@@ -1,10 +1,12 @@
+-type proplist() :: list({term(), term()}).
+
 -record(state, {
     method :: binary(),
-    params,
-    body,
-    query,
-    auth,
+    params :: proplist(),
+    body :: proplist(),
+    query :: proplist(),
+    auth :: {Identity :: term(), AllowedScope :: term()},
     completed = false :: boolean(),
-    options,
+    options :: proplist(),
     handler :: module()
   }).

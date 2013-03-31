@@ -89,6 +89,7 @@ routes() -> [
   {"/api/:bucket[/:id]", pecypc_api, [
     {handler, pecypc_test},
     {security, {<<"!cowboyftw!">>, 86400}},
+    {scope, <<"admin">>},
     {allow, [<<"GET">>, <<"POST">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>, <<"HEAD">>]}
   ]},
 

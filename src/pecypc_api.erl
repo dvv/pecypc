@@ -77,10 +77,13 @@ resource_available(Req, State) ->
   {true, Req, State}.
 
 allowed_methods(Req, State = #state{options = Opts}) ->
-  % % {[<<"GET">>, <<"PUT">>, <<"DELETE">>, <<"HEAD">>,
-  % %     <<"OPTIONS">>, <<"PATCH">>, <<"POST">>], Req, State}.
-  {_, Methods} = lists:keyfind(allow, 1, Opts),
-  {Methods, Req, State}.
+  case lists:keyfind(allow, 1, Opts) of
+    {_, Methods} ->
+      {Methods, Req, State};
+    false ->
+      {[<<"GET">>, <<"POST">>, <<"PUT">>, <<"DELETE">>,
+          <<"PATCH">>, <<"HEAD">>], Req, State}
+  end.
 
 %%
 %% Validate GET requests. Body is not yet available and conneg is not yet done.
@@ -112,15 +115,18 @@ is_authorized(Req, State = #state{options = Opts}) ->
 
 %%
 %% Checks user is authorized to access the resource.
-%% NB: Should be with respect to HTTP method.
+%% NB: POST carries batch RPC and access will be checked later on
+%%   for each request in the batch.
 %%
-forbidden(Req, State = #state{handler = Handler}) ->
-  case Handler:authorize(State) of
-    {ok, State2} ->
-      {false, Req, State2};
-    error ->
-      {true, Req, State}
-  end.
+forbidden(Req, State = #state{method = <<"POST">>}) ->
+  % {false, cowboy_req:set([{method, <<"PUT">>}], Req), State};
+  {false, Req, State};
+%%
+%% Other methods mean single action and access can be checked at once.
+%%
+forbidden(Req, State = #state{method = Method, auth = Auth, options = Opts}) ->
+  {_, BaseScope} = lists:keyfind(scope, 1, Opts),
+  {not call_allowed(Method, BaseScope, Auth), Req, State}.
 
 %%
 %% This may be used to protect against forged Content-Type: headers.
@@ -160,7 +166,7 @@ content_types_provided(Req, State) ->
 %%
 
 %%
-%% Delegates actual processing to application's get/2.
+%% Delegates actual processing to application's get/2 handler.
 %% Encodes response entity.
 %%
 %%
@@ -169,15 +175,22 @@ content_types_provided(Req, State) ->
 %%
 get_resource(Req, State = #state{
     query = Query, handler = Handler, options = Opts}) ->
-  case Handler:get(Query, Opts) of
+  try Handler:get(Query, Opts) of
     {ok, Result} ->
       {serialize(Result, Req), Req, State};
-    {goto, Location} ->
-      {halt, cowboy_req:set_resp_header(<<"location">>, Location, Req), State};
+    {error, Reason} ->
+      {halt, respond(400, Reason, Req), State};
     error ->
       {halt, respond(400, undefined, Req), State};
-    {error, Reason} ->
-      {halt, respond(400, Reason, Req), State}
+    {goto, Location} ->
+      {halt, cowboy_req:set_resp_header(<<"location">>, Location, Req), State}
+  catch Class:Reason ->
+    error_logger:error_msg(
+      "** API handler ~p terminating in get/3~n"
+      "   for the reason ~p:~p~n** State was ~p~n"
+      "** Stacktrace: ~p~n~n",
+      [Handler, Class, Reason, State, erlang:get_stacktrace()]),
+    {halt, respond(500, Reason, Req), State}
   end.
 
 %%
@@ -200,7 +213,7 @@ process_post(Req, State) ->
   end.
 
 %%
-%% NB: these handlers is also called on PATCH and POST.
+%% Handle PUT/PATCH requests.
 %%
 %% - {false, Req, State} --> 422 Unprocessable Entity
 %% - {true, Req, State} --> 204 No Content
@@ -236,38 +249,44 @@ put_form(Req, State) ->
 %% Take batch of requests from body, returns batch of responses.
 %% Requests processing delegated to application's handle(Method, [Args]).
 %%
-%% Request is either triplet array: [Method, Params, Id]
-%%   or duplet array: [Method, Params].
+%% Request is triplet array: [Method, Params, Id].
 %% Response is triplet array: [null, Result, Id] | [Error, null, Id].
-%% If Id is not set in request, corresponding response is null.
 %%
-put_resource(Req, State = #state{method = <<"POST">>,
-    body = Batch, handler = Handler}) ->
-  {true, set_resp_body(batch_rpc(Batch, Handler), Req), State};
+put_resource(Req, State = #state{method = <<"POST">>}) ->
+  {true, set_resp_body(batch_rpc(State), Req), State};
 
 %%
-%% Delegates actual processing to application's put/2.
+%% Delegates actual processing to application's put/3 handler.
 %% Encodes possible response entity.
 %%
-put_resource(Req, State = #state{
+put_resource(Req, State = #state{method = Method,
     query = Query, body = Data, handler = Handler, options = Opts}) ->
-  case Handler:put(Data, [{query, Query} | Opts]) of
-    ok ->
-      {true, Req, State};
+  % try apply(Handler,
+  %           binary_to_atom(cowboy_bstr:to_lower(Method), latin1),
+  %           [Data, Query, Opts])
+  % of
+  try Handler:put(Data, Query, [{method, Method} | Opts]) of
     {ok, Body} ->
       {true, set_resp_body(Body, Req), State};
-    % @todo process_put/2 should not know about HTTP terms like "location" etc.
-    {goto, Location} ->
-      {true, cowboy_req:set_resp_header(<<"location">>, Location, Req), State};
+    ok ->
+      {true, Req, State};
+    {error, Reason} ->
+      {halt, respond(400, Reason, Req), State};
     error ->
       {halt, respond(400, undefined, Req), State};
-    {error, Reason} ->
-      {halt, respond(400, Reason, Req), State}
+    {goto, Location} ->
+      {true, cowboy_req:set_resp_header(<<"location">>, Location, Req), State}
+  catch Class:Reason ->
+    error_logger:error_msg(
+      "** API handler ~p terminating in put/3~n"
+      "   for the reason ~p:~p~n** State was ~p~n"
+      "** Stacktrace: ~p~n~n",
+      [Handler, Class, Reason, State, erlang:get_stacktrace()]),
+    {halt, respond(500, Reason, Req), State}
   end.
 
 %%
-%% Delegates actual processing to application's delete/2.
-%% Encodes possible response entity.
+%% Delegates actual processing to application's delete/2 handler.
 %%
 %%
 %% NB: must be defined if DELETE in allowed methods or 500 Internal Server Error
@@ -278,7 +297,7 @@ put_resource(Req, State = #state{
 %%
 delete_resource(Req, State = #state{
     query = Query, handler = Handler, options = Opts}) ->
-  case Handler:delete(Query, Opts) of
+  try Handler:delete(Query, Opts) of
     ok ->
       {true, Req, State#state{completed = true}};
     accepted ->
@@ -287,6 +306,13 @@ delete_resource(Req, State = #state{
       {halt, respond(400, undefined, Req), State};
     {error, Reason} ->
       {halt, respond(400, Reason, Req), State}
+  catch Class:Reason ->
+    error_logger:error_msg(
+      "** API handler ~p terminating in delete/3~n"
+      "   for the reason ~p:~p~n** State was ~p~n"
+      "** Stacktrace: ~p~n~n",
+      [Handler, Class, Reason, State, erlang:get_stacktrace()]),
+    {halt, respond(500, Reason, Req), State}
   end.
 
 %%
@@ -304,32 +330,44 @@ delete_completed(Req, State = #state{completed = Completed}) ->
 %%------------------------------------------------------------------------------
 %%
 
-batch_rpc(Batch, Handler) ->
-  [
-    try rpc_reply(apply(Handler, handle, [Method, Params]), Id) of
-      Any -> Any
-    catch
-      _:function_clause ->
-        [<<"enoent">>, null, Id];
-      _:badarg ->
-        [<<"einval">>, null, Id];
-      _:badarith ->
-        [<<"einval">>, null, Id];
-      % @fixme this is defensive programming
-      _:Exception ->
-        [atom_to_binary(Exception, latin1), null, Id]
-    end || [Method, Params, Id] <- Batch
-  ].
-
-rpc_reply(_, null) ->
-  null;
-rpc_reply({ok, Result}, Id) ->
-  [null, Result, Id];
-rpc_reply({error, Reason}, Id) when is_atom(Reason) ->
-  [atom_to_binary(Reason, latin1), null, Id];
-rpc_reply({error, Reason}, Id) when
-    is_binary(Reason); is_number(Reason); is_boolean(Reason) ->
-  [Reason, null, Id].
+batch_rpc(#state{body = Batch,
+    handler = Handler, auth = Auth, options = Opts}) ->
+  {_, BaseScope} = lists:keyfind(scope, 1, Opts),
+  [case call_allowed(Method, BaseScope, Auth) of
+    true ->
+      try Handler:handle(Method, Args, Opts) of
+        {ok, Result} ->
+          [null, Result, Id];
+        ok ->
+          [null, null, Id];
+        % {error, Reason} when is_atom(Reason) ->
+        %   [atom_to_binary(Reason, latin1), null, Id];
+        {error, Reason} ->
+          [Reason, null, Id];
+        error ->
+          [reason(undefined), null, Id];
+        accepted ->
+          [null, null, Id];
+        {goto, Location} ->
+          [null, Location, Id]
+      catch
+        _:function_clause ->
+          [<<"enoent">>, null, Id];
+        _:badarg ->
+          [<<"einval">>, null, Id];
+        _:badarith ->
+          [<<"einval">>, null, Id];
+        Class:Reason ->
+          error_logger:error_msg(
+            "** API RPC handler ~p terminating in handle/3~n"
+            "   for the reason ~p:~p~n** Method was ~p~n"
+            "** Arguments were ~p~n** Stacktrace: ~p~n~n",
+            [Handler, Class, Reason, Method, Args, erlang:get_stacktrace()]),
+          [<<"einval">>, null, Id]
+      end;
+    false ->
+      [<<"eperm">>, null, Id]
+  end || [Method, Args, Id] <- Batch].
 
 %%
 %% -----------------------------------------------------------------------------
@@ -337,13 +375,22 @@ rpc_reply({error, Reason}, Id) when
 %% -----------------------------------------------------------------------------
 %%
 
-respond(Status, Reason, Req) ->
-  {ok, Req2} = cowboy_req:reply(Status, set_resp_body(reason(Reason), Req)),
-  Req2.
+%%
+%% Return true if Method of BaseScope is in AllowedScope, according to
+%% https://github.com/kivra/oauth2#scope.
+%%
+%% NB: Authentication token hardcoded to be tuple {Identity, AllowedScope}.
+%% @todo reconsider, maybe kick out to separate module or delegate to resource.
+%%
+call_allowed(Method, BaseScope, {_Identity, AllowedScope}) ->
+% pecypc_log:info({auth,
+%     << BaseScope/binary, $., Method/binary >>, AllowedScope}),
+  oauth2_priv_set:is_member(<< BaseScope/binary, $., Method/binary >>,
+      oauth2_priv_set:new(AllowedScope)).
 
-set_resp_body(Body, Req) ->
-  cowboy_req:set_resp_body(serialize(reason(Body), Req), Req).
-
+%%
+%% Error reporting.
+%%
 reason(undefined) ->
   reason(<<"unknown">>);
 reason(Reason) when is_list(Reason) ->
@@ -352,6 +399,16 @@ reason(Reason) when is_binary(Reason); is_number(Reason) ->
   reason([{error, Reason}]);
 reason(Reason) when is_atom(Reason) ->
   reason(atom_to_binary(Reason, latin1)).
+
+%%
+%% Response helpers
+%%
+respond(Status, Reason, Req) ->
+  {ok, Req2} = cowboy_req:reply(Status, set_resp_body(reason(Reason), Req)),
+  Req2.
+
+set_resp_body(Body, Req) ->
+  cowboy_req:set_resp_body(serialize(reason(Body), Req), Req).
 
 %%
 %% -----------------------------------------------------------------------------
