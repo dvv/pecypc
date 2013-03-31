@@ -1,7 +1,9 @@
 {"./src/*", [debug_info, {outdir, "./ebin"}, {i, "./src"}, {i, "./include"}]}.
 {"deps/cowboy/src/*", [debug_info, {outdir, "deps/cowboy/ebin"}, {i, "deps/cowboy/src"}, {i, "deps/cowboy/include"}]}.
 {"deps/erlydtl/src/*", [debug_info, {outdir, "deps/erlydtl/ebin"}, {i, "deps/erlydtl/src"}, {i, "deps/erlydtl/include"}]}.
+{"deps/jiffy_v/src/*", [debug_info, {outdir, "deps/jiffy_v/ebin"}, {i, "deps/jiffy_v/src"}, {i, "deps/jiffy_v/include"}]}.
 {"deps/jsx/src/*", [debug_info, {outdir, "deps/jsx/ebin"}, {i, "deps/jsx/src"}, {i, "deps/jsx/include"}]}.
+{"deps/lager/src/*", [debug_info, {outdir, "deps/lager/ebin"}, {i, "deps/lager/src"}, {i, "deps/lager/include"}]}.
 {"deps/mimetypes/src/*", [debug_info, {outdir, "deps/mimetypes/ebin"}, {i, "deps/mimetypes/src"}, {i, "deps/mimetypes/include"}]}.
 {"deps/ranch/src/*", [debug_info, {outdir, "deps/ranch/ebin"}, {i, "deps/ranch/src"}, {i, "deps/ranch/include"}]}.
 {"deps/saddle/src/*", [debug_info, {outdir, "deps/saddle/ebin"}, {i, "deps/saddle/src"}, {i, "deps/saddle/include"}]}.

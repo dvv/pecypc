@@ -54,14 +54,16 @@ init(_Transport, Req, Opts) ->
   % extract request info
   {Params, Req3} = cowboy_req:bindings(Req2),
   {Query, Req4} = cowboy_req:qs_vals(Req3),
-  %lists:ukeymerge(1, lists:ukeysort(1, Params), lists:ukeysort(1, Query)),
   {Method, Req5} = cowboy_req:method(Req4),
   % extract options
   {_, Handler} = lists:keyfind(handler, 1, Opts),
   % go rest
   {upgrade, protocol, cowboy_rest, Req5, #state{
       method = Method,
-      params = Params,
+      % params = Params,
+      params = lists:ukeymerge(1,
+          lists:ukeysort(1, Params),
+          lists:ukeysort(1, Query)),
       query = Query,
       options = Opts,
       handler = Handler
@@ -174,8 +176,8 @@ content_types_provided(Req, State) ->
 %% - {halt, Req, State} --> no further processing
 %%
 get_resource(Req, State = #state{
-    query = Query, handler = Handler, options = Opts}) ->
-  try Handler:get(Query, Opts) of
+    params = Params, handler = Handler, options = Opts}) ->
+  try Handler:get(Params, Opts) of
     {ok, Result} ->
       {serialize(Result, Req), Req, State};
     {error, Reason} ->
@@ -260,12 +262,12 @@ put_resource(Req, State = #state{method = <<"POST">>}) ->
 %% Encodes possible response entity.
 %%
 put_resource(Req, State = #state{method = Method,
-    query = Query, body = Data, handler = Handler, options = Opts}) ->
+    params = Params, body = Data, handler = Handler, options = Opts}) ->
   % try apply(Handler,
   %           binary_to_atom(cowboy_bstr:to_lower(Method), latin1),
   %           [Data, Query, Opts])
   % of
-  try Handler:put(Data, Query, [{method, Method} | Opts]) of
+  try Handler:put(Data, Params, [{method, Method} | Opts]) of
     {ok, Body} ->
       {true, set_resp_body(Body, Req), State};
     ok ->
@@ -296,8 +298,8 @@ put_resource(Req, State = #state{method = Method,
 %% - {halt, Req, State} --> no further processing
 %%
 delete_resource(Req, State = #state{
-    query = Query, handler = Handler, options = Opts}) ->
-  try Handler:delete(Query, Opts) of
+    params = Params, handler = Handler, options = Opts}) ->
+  try Handler:delete(Params, Opts) of
     ok ->
       {true, Req, State#state{completed = true}};
     accepted ->
@@ -404,11 +406,12 @@ reason(Reason) when is_atom(Reason) ->
 %% Response helpers
 %%
 respond(Status, Reason, Req) ->
+% pecypc_log:info({respond, Status, Reason}),
   {ok, Req2} = cowboy_req:reply(Status, set_resp_body(reason(Reason), Req)),
   Req2.
 
 set_resp_body(Body, Req) ->
-  cowboy_req:set_resp_body(serialize(reason(Body), Req), Req).
+  cowboy_req:set_resp_body(serialize(Body, Req), Req).
 
 %%
 %% -----------------------------------------------------------------------------

@@ -86,11 +86,18 @@ dispatch() ->
   cowboy_router:compile([{'_', lists:flatten(routes())}]).
 
 routes() -> [
+  {"/api/user[/:id]", pecypc_api, [
+    {handler, pecypc_user},
+    {security, {<<"!cowboyftw!">>, 86400}},
+    % {allow, [<<"GET">>, <<"POST">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>, <<"HEAD">>]},
+    {scope, <<"user">>}
+  ]},
+
   {"/api/:bucket[/:id]", pecypc_api, [
     {handler, pecypc_test},
     {security, {<<"!cowboyftw!">>, 86400}},
-    {scope, <<"admin">>},
-    {allow, [<<"GET">>, <<"POST">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>, <<"HEAD">>]}
+    % {allow, [<<"GET">>, <<"POST">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>, <<"HEAD">>]},
+    {scope, <<"admin">>}
   ]},
 
   % oauth2 server
