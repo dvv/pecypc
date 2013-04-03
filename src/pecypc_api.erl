@@ -102,8 +102,8 @@ is_authorized(Req, State = #state{options = Opts}) ->
   case cowboy_req:parse_header(<<"authorization">>, Req) of
     {ok, {<<"bearer">>, Token}, Req2} ->
       % NB: dvv/termit for opaque signed encoded data
-      {_, {Secret, TimeToLive}} = lists:keyfind(security, 1, Opts),
-      case termit:decode_base64(Token, Secret, TimeToLive) of
+      {_, Secret} = lists:keyfind(security, 1, Opts),
+      case termit:decode_base64(Token, Secret) of
         {ok, Auth} ->
           {true, Req2, State#state{auth = Auth}};
         {error, _Reason} ->
@@ -381,14 +381,17 @@ batch_rpc(#state{body = Batch,
 %% Return true if Method of BaseScope is in AllowedScope, according to
 %% https://github.com/kivra/oauth2#scope.
 %%
-%% NB: Authentication token hardcoded to be tuple {Identity, AllowedScope}.
+%% NB: Authentication token hardcoded to be tuple
+%%   {access_token, Identity, AllowedScope}.
 %% @todo reconsider, maybe kick out to separate module or delegate to resource.
 %%
-call_allowed(Method, BaseScope, {_Identity, AllowedScope}) ->
+call_allowed(Method, BaseScope, {access_token, _Identity, AllowedScope}) ->
 % pecypc_log:info({auth,
 %     << BaseScope/binary, $., Method/binary >>, AllowedScope}),
   oauth2_priv_set:is_member(<< BaseScope/binary, $., Method/binary >>,
-      oauth2_priv_set:new(AllowedScope)).
+      oauth2_priv_set:new(AllowedScope));
+call_allowed(_, _, _) ->
+  false.
 
 %%
 %% Error reporting.

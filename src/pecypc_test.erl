@@ -11,7 +11,11 @@
 -behaviour(saddle_backend).
 -export([
     authorize_client_credentials/4,
-    authorize_username_password/3
+    authorize_username_password/3,
+    register_client/4,
+    validate_client/2,
+    register_token/2,
+    validate_token/2
   ]).
 
 -export([handle/3]).
@@ -89,3 +93,43 @@ authorize_client_credentials(ClientId, _, ClientSecret, _) when
 authorize_client_credentials(ClientId, RedirectUri, ClientSecret, Scope) ->
 pecypc_log:info({a, ClientId, RedirectUri, ClientSecret, Scope}),
   {ok, {client, ClientId}, Scope}.
+
+%%
+%% Register a new client.
+%%
+register_client(undefined, _, _, _) ->
+  {error, badarg};
+register_client(_, undefined, _, _) ->
+  {error, badarg};
+register_client(_, _, undefined, _) ->
+  {error, scope};
+register_client(_, _, _, undefined) ->
+  {error, badarg};
+register_client(Name, RedirectUri, Scope, {Secret, Ttl}) ->
+  termit:encode_base64({client, Name, RedirectUri, Scope}, Secret, Ttl);
+register_client(Name, RedirectUri, Scope, Secret) ->
+  termit:encode_base64({client, Name, RedirectUri, Scope}, Secret).
+
+%%
+%% Get info on given client.
+%%
+validate_client(undefined, _) ->
+  {error, badarg};
+validate_client(_, undefined) ->
+  {error, badarg};
+validate_client(ClientId, Secret) ->
+  termit:decode_base64(ClientId, Secret).
+
+%%
+%% Generate token.
+%%
+register_token(Data, {Secret, Ttl}) ->
+  termit:encode_base64(Data, Secret, Ttl);
+register_token(Data, Secret) ->
+  termit:encode_base64(Data, Secret).
+
+%%
+%% Validate token and retrieve info.
+%%
+validate_token(Token, Secret) ->
+  termit:decode_base64(Token, Secret).

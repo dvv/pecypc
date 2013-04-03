@@ -88,14 +88,13 @@ dispatch() ->
 routes() -> [
   {"/api/user[/:id]", pecypc_api, [
     {handler, pecypc_user},
-    {security, {<<"!cowboyftw!">>, 86400}},
-    % {allow, [<<"GET">>, <<"POST">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>, <<"HEAD">>]},
+    {security, <<"!cowboyftw!">>},
     {scope, <<"user">>}
   ]},
 
   {"/api/:bucket[/:id]", pecypc_api, [
     {handler, pecypc_test},
-    {security, {<<"!cowboyftw!">>, 86400}},
+    {security, <<"!cowboyftw!">>},
     % {allow, [<<"GET">>, <<"POST">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>, <<"HEAD">>]},
     {scope, <<"admin">>}
   ]},
@@ -103,12 +102,14 @@ routes() -> [
   % oauth2 server
   {"/oauth2", oauth2_provider, [
     {backend, pecypc_test},
+    {client_secret, <<"+cowboyftw+">>},
+    {client_ttl, 86400 * 365},
     {code_secret, <<"?cowboyftw?">>},
     {code_ttl, 60},
     {token_secret, <<"!cowboyftw!">>},
     {token_ttl, 86400},
     {refresh_secret, <<"@cowboyftw@">>},
-    {refresh_ttl, 86400}
+    {refresh_ttl, 186400}
   ]},
 
   % oauth2 client helper
