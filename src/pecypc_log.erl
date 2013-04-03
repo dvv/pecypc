@@ -1,7 +1,9 @@
 -module(pecypc_log).
 -author('Vladimir Dronnikov <dronnikov@gmail.com>').
 
--export([info/1, error/1]).
+-compile([{parse_transform, lager_transform}]).
+
+-export([info/1, warn/1, error/1]).
 
 %% -----------------------------------------------------------------------------
 %% Poorman logger
@@ -9,7 +11,13 @@
 %% -----------------------------------------------------------------------------
 
 info(X) ->
-  error_logger:info_report(X).
+  lager:info("~p", [X]).
+  % error_logger:info_report(X).
+
+warn(X) ->
+  lager:warning("~p", [X]).
+  % error_logger:info_report(X).
 
 error(X) ->
-  error_logger:error_report(X).
+  lager:error("~p", [X]).
+  % error_logger:error_report(X).

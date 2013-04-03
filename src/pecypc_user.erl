@@ -52,6 +52,7 @@ schema(get) -> {hash, [
 ]};
 schema(put) -> {hash, [
   {<<"email">>, required, {string}},
+  {<<"l">>, required, {list, [{any}]}},
   {<<"foo">>, required, {hash, [
     {<<"bar">>, required, {any}}
   ]}}

@@ -34,10 +34,10 @@ pecypc_log:info({put, B, Q, O}),
   % {ok, <<"PUT">>}.
   % {new, <<"foo">>}.
   % {error, <<"PUT">>}.
-  {_, {Secret, _}} = lists:keyfind(security, 1, O),
+  {_, {Secret, Ttl}} = lists:keyfind(security, 1, O),
   {ok, [{bearer, termit:encode_base64({{user, <<"dvv">>}, [
         <<"admin.add">>, <<"admin.PUT">>, <<"admin.GET">>, <<"user.*">>
-      ]}, Secret)}]}.
+      ]}, Secret, Ttl)}]}.
 
 delete(Q, O) ->
 pecypc_log:info({delete, Q, O}),

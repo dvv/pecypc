@@ -106,7 +106,7 @@ routes() -> [
     {code_secret, <<"?cowboyftw?">>},
     {code_ttl, 60},
     {token_secret, <<"!cowboyftw!">>},
-    {token_ttl, 3600},
+    {token_ttl, 86400},
     {refresh_secret, <<"@cowboyftw@">>},
     {refresh_ttl, 86400}
   ]},
