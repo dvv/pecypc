@@ -10,10 +10,11 @@
 % backend
 -behaviour(saddle_backend).
 -export([
-    authorize_client_credentials/4,
+    authorize_client_credentials/3,
     authorize_username_password/3,
+    verify_redirection_uri/2,
     register_client/4,
-    validate_client/2,
+    validate_client/4,
     register_token/2,
     validate_token/2
   ]).
@@ -74,51 +75,69 @@ pecypc_log:info({add, X, Y}),
 %%
 authorize_username_password(_, _, undefined) ->
   {error, scope};
-authorize_username_password(Username, Password, _) when
-    Username =:= undefined; Password =:= undefined ->
-  {error, mismatch};
+authorize_username_password(Username, Password, Scope)
+  when   Username =:= undefined
+  orelse Password =:= undefined ->
+  {error, badarg};
 authorize_username_password(Username, Password, Scope) ->
+  % {error, badarg}.
+  % {error, mismatch}.
+  % {error, scope}.
   {ok, {user, Username}, Scope}.
 
 %%
 %% Validate client credentials for given scope.
 %%
-authorize_client_credentials(_, undefined, _, _) ->
-  {error, redirect_uri};
-authorize_client_credentials(_, _, _, undefined) ->
+authorize_client_credentials(_, _, undefined) ->
   {error, scope};
-authorize_client_credentials(ClientId, _, ClientSecret, _) when
-    ClientId =:= undefined; ClientSecret =:= undefined ->
-  {error, mismatch};
-authorize_client_credentials(ClientId, RedirectUri, ClientSecret, Scope) ->
-pecypc_log:info({a, ClientId, RedirectUri, ClientSecret, Scope}),
+authorize_client_credentials(ClientId, ClientSecret, Scope)
+  when   ClientId =:= undefined
+  orelse ClientSecret =:= undefined ->
+  {error, badarg};
+authorize_client_credentials(ClientId, implicit, Scope) ->
+  {ok, {client, ClientId}, Scope};
+authorize_client_credentials(ClientId, _ClientSecret, Scope) ->
   {ok, {client, ClientId}, Scope}.
+
+verify_redirection_uri(ClientId, RedirectUri) ->
+  % {error, mismatch}.
+  % {error, badarg}.
+  ok.
 
 %%
 %% Register a new client.
 %%
-register_client(undefined, _, _, _) ->
+register_client(Identity, RedirectUri, Scope, Options)
+    when Identity =:= undefined
+    orelse RedirectUri =:= undefined
+    orelse Scope =:= undefined
+    orelse Options =:= undefined ->
   {error, badarg};
-register_client(_, undefined, _, _) ->
-  {error, badarg};
-register_client(_, _, undefined, _) ->
-  {error, scope};
-register_client(_, _, _, undefined) ->
-  {error, badarg};
-register_client(Name, RedirectUri, Scope, {Secret, Ttl}) ->
-  termit:encode_base64({client, Name, RedirectUri, Scope}, Secret, Ttl);
-register_client(Name, RedirectUri, Scope, Secret) ->
-  termit:encode_base64({client, Name, RedirectUri, Scope}, Secret).
+register_client(Identity, RedirectUri, Scope, {Secret, Ttl}) ->
+  termit:encode_base64({client, Identity, RedirectUri, Scope}, Secret, Ttl);
+register_client(Identity, RedirectUri, Scope, Secret) ->
+  termit:encode_base64({client, Identity, RedirectUri, Scope}, Secret).
 
 %%
 %% Get info on given client.
 %%
-validate_client(undefined, _) ->
+validate_client(ClientId, RedirectUri, Scope, Secret)
+    when ClientId =:= undefined
+    orelse RedirectUri =:= undefined
+    orelse Scope =:= undefined
+    orelse Secret =:= undefined ->
   {error, badarg};
-validate_client(_, undefined) ->
-  {error, badarg};
-validate_client(ClientId, Secret) ->
-  termit:decode_base64(ClientId, Secret).
+validate_client(ClientId, RedirectUri, Scope, Secret) ->
+  case termit:decode_base64(ClientId, Secret) of
+    {ok, {client, Name, RedirectUri, Scope}} ->
+      {ok, Name};
+    {ok, {client, _, _, _}} ->
+      {error, badarg};
+    {ok, _} ->
+      {error, badarg};
+    {error, _} ->
+      {error, badarg}
+  end.
 
 %%
 %% Generate token.

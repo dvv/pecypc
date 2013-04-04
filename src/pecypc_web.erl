@@ -76,7 +76,7 @@ protocol() -> [
 
   % Request environment
   {env, [
-    {session_opts, pecypc_app:key(session_opts)},
+    {session_opts, pecypc_app:key(session)},
     % dispatch rules
     {dispatch, dispatch()}
   ]}

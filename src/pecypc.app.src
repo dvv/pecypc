@@ -21,11 +21,11 @@
     ssl,
     public_key,
     lager,
-    cowboy
+    cowboy,
+    saddle
   ]},
 
   % configuration
-  {env, [
-  ]}
+  {env, []}
 
 ]}.
