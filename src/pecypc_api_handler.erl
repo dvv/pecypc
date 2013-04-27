@@ -1,33 +1,95 @@
 -module(pecypc_api_handler).
 -author('Vladimir Dronnikov <dronnikov@gmail.com>').
 
--include("pecypc_api.hrl").
-
+-type proplist() :: list({term(), term()}).
+-type method() :: binary().
 -type query() :: proplist().
 -type body() :: proplist().
 -type options() :: proplist().
+-type location() :: binary().
 -type result() :: term().
 -type error() :: term().
+-type scope() :: binary() | list(binary()).
 
--callback get(Query :: query(), Options :: options()) ->
-    {ok, Result :: result()} |
-    {goto, Where :: binary()} |
-    error |
-    {error, Reason :: error()}.
+%%
+%% Given credentials and their type return opaque authorization term.
+%%
+-callback authorize(
+    Type :: token | password | session,
+    Credentials :: term(),
+    Options :: options()) ->
+  {ok, {Identity :: term(), Scope :: scope()}} |
+  {error, Reason :: error()}.
 
--callback put(Body :: body(), Query :: query(), Options :: options()) ->
-    ok |
-    {ok, Result :: result()} |
-    {goto, Where :: binary()} |
-    error |
-    {error, Reason :: error()}.
+%%
+%% Given resource method to call and authorization term returned from
+%% authorize/3 determine whether call to method is allowed.
+%%
+-callback allowed(
+    Method :: method(),
+    {Identity :: term(), Scope :: scope()}) ->
+  true |
+  false.
 
--callback delete(Query :: query(), Options :: options()) ->
-    ok |
-    accepted |
-    error |
-    {error, Reason :: error()}.
+%%
+%% Retrieve resource.
+%%
+%% Query is proplist collected from URI params.
+%% Options is proplist options specified for handler in router augmented with
+%%   authorization info obtained in authorize/3.
+%%
+-callback get(
+    Query :: query(),
+    Options :: options()) ->
+  {ok, Result :: result()} |
+  {goto, Where :: location()} |
+  error |
+  {error, Reason :: error()}.
 
--callback handle(Function :: binary(), Args :: list(), Options :: options()) ->
-    {ok, Result :: result()} |
-    {error, Reason :: error()}.
+%%
+%% Put/patch resource.
+%%
+%% Body is request body.
+%% Query is proplist collected from URI params.
+%% Options is proplist options specified for handler in router augmented with
+%%   authorization info obtained in authorize/3.
+%%
+-callback put(
+    Body :: body(),
+    Query :: query(),
+    Options :: options()) ->
+  ok |
+  {ok, Result :: result()} |
+  {goto, Where :: location()} |
+  error |
+  {error, Reason :: error()}.
+
+%%
+%% Remove resource.
+%%
+%% Query is proplist collected from URI params.
+%% Options is proplist options specified for handler in router augmented with
+%%   authorization info obtained in authorize/3.
+%%
+-callback delete(
+    Query :: query(),
+    Options :: options()) ->
+  ok |
+  accepted |
+  error |
+  {error, Reason :: error()}.
+
+%%
+%% Handle RPC via POST to resource.
+%%
+%% Function is method to call.
+%% Args is arguments proplist.
+%% Options is proplist options specified for handler in router augmented with
+%%   authorization info obtained in authorize/3.
+%%
+-callback handle(
+    Function :: binary(),
+    Args :: list(),
+    Options :: options())->
+  {ok, Result :: result()} |
+  {error, Reason :: error()}.

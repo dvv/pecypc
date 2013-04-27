@@ -21,9 +21,6 @@
     options/2,
     content_types_accepted/2,
     content_types_provided/2,
-    % post_is_create/2,
-    % created_path/2,
-    process_post/2,
     delete_resource/2,
     delete_completed/2
   ]).
@@ -39,7 +36,18 @@
     put_json/2
   ]).
 
--include("pecypc_api.hrl").
+-type proplist() :: list({term(), term()}).
+
+-record(state, {
+    method :: binary(),
+    params :: proplist(),
+    body :: proplist(),
+    query :: proplist(),
+    auth :: {Identity :: term(), AllowedScope :: term()},
+    completed = false :: boolean(),
+    options :: proplist(),
+    handler :: module()
+  }).
 
 init(_Transport, Req, Opts) ->
   Req2 = case lists:keyfind(patch, 1, Opts) of
@@ -94,25 +102,33 @@ malformed_request(Req, State) ->
   {false, Req, State}.
 
 %%
-%% Validate authentication credentials provided and not forged.
-%% Bearer or basic authorization required.
-%% @todo consider dropping security key before continuing
+%% Verify that authentication credentials provided and not forged.
+%% Bearer or basic authorization, or session required.
 %%
 is_authorized(Req, State = #state{options = Opts}) ->
   case cowboy_req:parse_header(<<"authorization">>, Req) of
     {ok, {<<"bearer">>, Token}, Req2} ->
-      % NB: dvv/termit for opaque signed encoded data
-      {_, Secret} = lists:keyfind(security, 1, Opts),
-      case termit:decode_base64(Token, Secret) of
-        {ok, Auth} ->
-          {true, Req2, State#state{auth = Auth}};
-        {error, _Reason} ->
-          {{false, <<"Bearer, Basic">>}, Req2, State}
-      end;
+      {_, Secret} = lists:keyfind(token_secret, 1, Opts),
+      try_authorize(Req2, State, token, {Token, Secret});
     {ok, {<<"basic">>, Credentials}, Req2} ->
-      {true, Req2, State#state{auth = Credentials}};
+      try_authorize(Req2, State, password, Credentials);
     _ ->
-      {{false, <<"Bearer, Basic">>}, Req, State}
+      {Session, Req2} = cowboy_session:get(Req),
+      try_authorize(Req2, State, session, Session)
+  end.
+
+try_authorize(Req, State = #state{params = Params, handler = Handler},
+    Type, Credentials) ->
+  case erlang:function_exported(Handler, authorize, 3) of
+    true ->
+      case Handler:authorize(Type, Credentials, Params) of
+        {ok, Auth} ->
+          {true, Req, State#state{auth = Auth}};
+        {error, _} ->
+          {{false, <<"Bearer, Basic, Cookie">>}, Req, State}
+      end;
+    false ->
+      {true, Req, State#state{auth = none}}
   end.
 
 %%
@@ -121,14 +137,13 @@ is_authorized(Req, State = #state{options = Opts}) ->
 %%   for each request in the batch.
 %%
 forbidden(Req, State = #state{method = <<"POST">>}) ->
-  % {false, cowboy_req:set([{method, <<"PUT">>}], Req), State};
   {false, Req, State};
 %%
 %% Other methods mean single action and access can be checked at once.
 %%
-forbidden(Req, State = #state{method = Method, auth = Auth, options = Opts}) ->
-  {_, BaseScope} = lists:keyfind(scope, 1, Opts),
-  {not call_allowed(Method, BaseScope, Auth), Req, State}.
+forbidden(Req, State = #state{method = Method,
+    auth = Auth, handler = Handler}) ->
+  {not call_allowed(Method, Auth, Handler), Req, State}.
 
 %%
 %% This may be used to protect against forged Content-Type: headers.
@@ -176,9 +191,10 @@ content_types_provided(Req, State) ->
 %% - {halt, Req, State} --> no further processing
 %%
 get_resource(Req, State = #state{
-    params = Params, handler = Handler, options = Opts}) ->
-  try Handler:get(Params, Opts) of
+    params = Params, handler = Handler, options = Opts, auth = Auth}) ->
+  try Handler:get(Params, [{auth, Auth} | Opts]) of
     {ok, Result} ->
+      % @todo CORS
       {serialize(Result, Req), Req, State};
     {error, Reason} ->
       {halt, respond(400, Reason, Req), State};
@@ -196,26 +212,7 @@ get_resource(Req, State = #state{
   end.
 
 %%
-%% Route POST to put_*.
-%%
-% post_is_create(Req, State) ->
-%   {true, Req, State}.
-
-% created_path(Req, State) ->
-%   {<<>>, Req, State}.
-
-process_post(Req, State) ->
-  case put_json(Req, State) of
-    % mimic PUT's behaviour on false response
-    {false, Req2, State2} ->
-      {ok, Req3} = cowboy_req:reply(422, Req2),
-      {halt, Req3, State2};
-    Else ->
-      Else
-  end.
-
-%%
-%% Handle PUT/PATCH requests.
+%% Handle PUT/POST/PATCH requests.
 %%
 %% - {false, Req, State} --> 422 Unprocessable Entity
 %% - {true, Req, State} --> 204 No Content
@@ -248,26 +245,19 @@ put_form(Req, State) ->
 
 %%
 %% POST is used for free-style RPC.
-%% Take batch of requests from body, returns batch of responses.
-%% Requests processing delegated to application's handle(Method, [Args]).
-%%
-%% Request is triplet array: [Method, Params, Id].
-%% Response is triplet array: [null, Result, Id] | [Error, null, Id].
 %%
 put_resource(Req, State = #state{method = <<"POST">>}) ->
-  {true, set_resp_body(batch_rpc(State), Req), State};
+  % {true, set_resp_body(batch_rpc(State), Req), State};
+  {halt, respond(200, batch_rpc(State), Req), State};
 
 %%
-%% Delegates actual processing to application's put/3 handler.
-%% Encodes possible response entity.
+%% Other bodyful methods delegate actual processing to application's
+%% put/3 handler.
+%% Response entity is encoded according to Accept: header.
 %%
-put_resource(Req, State = #state{method = Method,
-    params = Params, body = Data, handler = Handler, options = Opts}) ->
-  % try apply(Handler,
-  %           binary_to_atom(cowboy_bstr:to_lower(Method), latin1),
-  %           [Data, Query, Opts])
-  % of
-  try Handler:put(Data, Params, [{method, Method} | Opts]) of
+put_resource(Req, State = #state{method = Method, body = Data,
+    params = Params, handler = Handler, options = Opts, auth = Auth}) ->
+  try Handler:put(Data, Params, [{auth, Auth}, {method, Method} | Opts]) of
     {ok, Body} ->
       {true, set_resp_body(Body, Req), State};
     ok ->
@@ -298,8 +288,8 @@ put_resource(Req, State = #state{method = Method,
 %% - {halt, Req, State} --> no further processing
 %%
 delete_resource(Req, State = #state{
-    params = Params, handler = Handler, options = Opts}) ->
-  try Handler:delete(Params, Opts) of
+    params = Params, handler = Handler, options = Opts, auth = Auth}) ->
+  try Handler:delete(Params, [{auth, Auth} | Opts]) of
     ok ->
       {true, Req, State#state{completed = true}};
     accepted ->
@@ -318,7 +308,7 @@ delete_resource(Req, State = #state{
   end.
 
 %%
-%% It indicates whether the resource has been deleted yet.
+%% Indicates whether the resource has been deleted yet.
 %% - {true, Req, State} --> go ahead with 200/204
 %% - {false, Req, State} --> 202 Accepted
 %% - {halt, Req, State} --> no further processing
@@ -332,12 +322,19 @@ delete_completed(Req, State = #state{completed = Completed}) ->
 %%------------------------------------------------------------------------------
 %%
 
+%%
+%% Takes batch of requests from body, returns batch of responses.
+%% Requests processing delegated to application's handle(Method, [Args]).
+%%
+%% Request is triplet array: [Method, Params, Id].
+%% Response is triplet array: [null, Result, Id] | [Error, null, Id].
+%%
 batch_rpc(#state{body = Batch,
-    handler = Handler, auth = Auth, options = Opts}) ->
-  {_, BaseScope} = lists:keyfind(scope, 1, Opts),
-  [case call_allowed(Method, BaseScope, Auth) of
+    handler = Handler, options = Opts, auth = Auth}) ->
+  Opts2 = [{auth, Auth} | Opts],
+  [case call_allowed(Method, Auth, Handler) of
     true ->
-      try Handler:handle(Method, Args, Opts) of
+      try Handler:handle(Method, Args, Opts2) of
         {ok, Result} ->
           [null, Result, Id];
         ok ->
@@ -377,21 +374,13 @@ batch_rpc(#state{body = Batch,
 %% -----------------------------------------------------------------------------
 %%
 
-%%
-%% Return true if Method of BaseScope is in AllowedScope, according to
-%% https://github.com/kivra/oauth2#scope.
-%%
-%% NB: Authentication token hardcoded to be tuple
-%%   {access_token, Identity, AllowedScope}.
-%% @todo reconsider, maybe kick out to separate module or delegate to resource.
-%%
-call_allowed(Method, BaseScope, {access_token, _Identity, AllowedScope}) ->
-% pecypc_log:info({auth,
-%     << BaseScope/binary, $., Method/binary >>, AllowedScope}),
-  oauth2_priv_set:is_member(<< BaseScope/binary, $., Method/binary >>,
-      oauth2_priv_set:new(AllowedScope));
-call_allowed(_, _, _) ->
-  false.
+call_allowed(Method, Auth, Handler) ->
+  case erlang:function_exported(Handler, allowed, 2) of
+    true ->
+      Handler:allowed(Method, Auth);
+    false ->
+      true
+  end.
 
 %%
 %% Error reporting.
@@ -409,7 +398,6 @@ reason(Reason) when is_atom(Reason) ->
 %% Response helpers
 %%
 respond(Status, Reason, Req) ->
-% pecypc_log:info({respond, Status, Reason}),
   {ok, Req2} = cowboy_req:reply(Status, set_resp_body(reason(Reason), Req)),
   Req2.
 
@@ -426,14 +414,12 @@ serialize(Body, Req) ->
   % NB: we choose encoder from media_type meta, honoring Accept: header.
   % One may choose to always encode to one fixed format as well.
   {CType, _} = cowboy_req:meta(media_type, Req),
-  encode(CType, Body).
+  encode(CType, Body, Req).
 
 %% NB: first argument should match those of content_types_*/2
-encode({<<"application">>, <<"x-www-form-urlencoded">>, []}, Body) ->
+encode({<<"application">>, <<"x-www-form-urlencoded">>, []}, Body, _Req) ->
   urlencode(Body);
-encode({<<"application">>, <<"json">>, []}, Body) ->
-%   jsx:encode(Body);
-% encode(undefined, Body) ->
+encode({<<"application">>, <<"json">>, []}, Body, _Req) ->
   jsx:encode(Body).
 
 %% NB: Cowboy issue #479
@@ -448,11 +434,5 @@ urlencode({K, undefined}) ->
 urlencode({K, V}) ->
   << (urlencode(K))/binary, $=, (urlencode(V))/binary >>;
 urlencode(List) when is_list(List) ->
-  binary_join([urlencode(X) || X <- List], << $& >>).
-
-binary_join([], _Sep) ->
-  <<>>;
-binary_join([H], _Sep) ->
-  << H/binary >>;
-binary_join([H | T], Sep) ->
-  << H/binary, Sep/binary, (binary_join(T, Sep))/binary >>.
+  << "&", R/binary >> = << << "&", (urlencode(X))/binary >> || X <- List >>,
+  R.

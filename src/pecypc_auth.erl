@@ -22,18 +22,30 @@ execute(Req, Env) ->
   end.
 
 dispatch() -> [
-  {<<"u">>, cowboy_router:compile([{'_', routes_for_user(<<"u">>)}])},
-  {<<"a">>, cowboy_router:compile([{'_', routes_for_admin(<<"a">>)}])}
+  {<<"u">>, cowboy_router:compile([{'_', lists:flatten(routes_for_user(<<"u">>))}])},
+  {<<"a">>, cowboy_router:compile([{'_', lists:flatten(routes_for_admin(<<"a">>))}])}
+].
+
+routes_for_guest() -> [
+  % static content: /* -> /priv/www/*
+  {"/[...]", cowboy_static, [
+    %{directory, "priv/www"},
+    {directory, {priv_dir, pecypc, [<<"www">>]}},
+    % @todo get rid of gen_server-ish mimetypes
+    {mimetypes, {{mimetypes, path_to_mimes}, default}}
+  ]}
 ].
 
 routes_for_user(<<"u">>) -> [
-  {"/u", handler, []}
+  {"/u", handler, []},
+  routes_for_guest()
 ];
 routes_for_user(_) ->
   [].
 
 routes_for_admin(<<"a">>) -> [
-  {"/a", handler, []}
+  {"/a", handler, []},
+  routes_for_user(<<"u">>)
 ];
 routes_for_admin(_) ->
   [].

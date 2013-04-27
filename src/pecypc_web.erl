@@ -34,23 +34,24 @@ reload() ->
 config() ->
   % transport options
   TransOpts = transport(),
-  % NB: honor heroku environment
+  % NB: honor foreign environment
   TransOpts2 = case os:getenv("PORT") of
-    false ->
-      TransOpts;
-    Port ->
-      [{port, list_to_integer(Port)} | lists:keydelete(port, 1, TransOpts)]
+    false -> TransOpts;
+    Port -> [{port, list_to_integer(Port)} |
+                lists:keydelete(port, 1, TransOpts)]
   end,
   TransOpts3 = case os:getenv("HOST") of
-    false ->
-      TransOpts2;
-    Host ->
-      [{host, Host} | lists:keydelete(host, 1, TransOpts2)]
+    false -> TransOpts2;
+    Host -> [{host, Host} | lists:keydelete(host, 1, TransOpts2)]
   end,
   % protocol options
   ProtoOpts = protocol(),
 % pecypc_log:info({proto, ProtoOpts}),
   {ok, TransOpts3, ProtoOpts}.
+
+%% -----------------------------------------------------------------------------
+%% Configuration
+%% -----------------------------------------------------------------------------
 
 transport() -> [
   % Port number to listen to
@@ -71,12 +72,14 @@ protocol() -> [
   {middlewares, [
     cowboy_router,                % determine handler and its options
     cowboy_session,               % requires session_opts in environment
+    % cowboy_bearer,                % requires bearer_opts in environment
     cowboy_handler                % process request
   ]},
 
   % Request environment
   {env, [
     {session_opts, pecypc_app:key(session)},
+    {bearer_opts, pecypc_app:key(bearer)},
     % dispatch rules
     {dispatch, dispatch()}
   ]}
@@ -88,15 +91,12 @@ dispatch() ->
 routes() -> [
   {"/api/user[/:id]", pecypc_api, [
     {handler, pecypc_user},
-    {security, <<"!cowboyftw!">>},
-    {scope, <<"user">>}
+    {token_secret, <<"!cowboyftw!">>}
   ]},
 
   {"/api/:bucket[/:id]", pecypc_api, [
     {handler, pecypc_test},
-    {security, <<"!cowboyftw!">>},
-    % {allow, [<<"GET">>, <<"POST">>, <<"PUT">>, <<"PATCH">>, <<"DELETE">>, <<"HEAD">>]},
-    {scope, <<"admin">>}
+    {token_secret, <<"!cowboyftw!">>}
   ]},
 
   % oauth2 server
@@ -105,7 +105,7 @@ routes() -> [
     {client_secret, <<"+cowboyftw+">>},
     {client_ttl, 86400 * 365},
     {code_secret, <<"?cowboyftw?">>},
-    {code_ttl, 60},
+    {code_ttl, 10},
     {token_secret, <<"!cowboyftw!">>},
     {token_ttl, 86400},
     {refresh_secret, <<"@cowboyftw@">>},
@@ -119,7 +119,7 @@ routes() -> [
   [{"/api/" ++ atom_to_list(P) ++ "/:action", cowboy_social_profile, [{provider, P} | O]}
         || {P, O} <- pecypc_app:key(social_providers)],
 
-  % static content: /* -> /priv/html/*
+  % static content: /* -> /priv/www/*
   {"/[...]", cowboy_static, [
     %{directory, "priv/www"},
     {directory, {priv_dir, pecypc, [<<"www">>]}},
