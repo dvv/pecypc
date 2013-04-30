@@ -469,25 +469,24 @@ serialize(Body, Req) ->
 encode({<<"application">>, <<"x-www-form-urlencoded">>, []}, Body, _Req) ->
   build_qs(Body);
 encode({<<"application">>, <<"json">>, []}, Body, _Req) ->
+  jsx:encode(Body);
+encode({<<"application">>, <<"rpc+json">>, []}, Body, _Req) ->
   jsx:encode(Body).
 
 %% NB: Cowboy issue #479
-urlencode(Bin) when is_binary(Bin) ->
+build_qs(Bin) when is_binary(Bin) ->
   cowboy_http:urlencode(Bin);
-urlencode(Atom) when is_atom(Atom) ->
-  urlencode(atom_to_binary(Atom, latin1));
-urlencode(Int) when is_integer(Int) ->
+build_qs(Atom) when is_atom(Atom) ->
+  build_qs(atom_to_binary(Atom, latin1));
+build_qs(Int) when is_integer(Int) ->
   % NB: nothing unsafe in integers
-  list_to_binary(integer_to_list(Int)).
-
-build_qs_pair({K, undefined}) ->
-  << (urlencode(K))/binary, $= >>;
-build_qs_pair({K, V}) ->
-  << (urlencode(K))/binary, $=, (urlencode(V))/binary >>.
-
--spec build_qs(Params :: proplist()) -> binary().
+  list_to_binary(integer_to_list(Int));
+build_qs({K, undefined}) ->
+  << (build_qs(K))/binary, $= >>;
+build_qs({K, V}) ->
+  << (build_qs(K))/binary, $=, (build_qs(V))/binary >>;
 build_qs([]) ->
   <<>>;
 build_qs(List) when is_list(List) ->
-  << "&", R/binary >> = << << "&", (build_qs_pair(X))/binary >> || X <- List >>,
+  << "&", R/binary >> = << << "&", (build_qs(X))/binary >> || X <- List >>,
   R.
