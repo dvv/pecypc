@@ -1,6 +1,6 @@
 -module(pecypc_test).
 
--behaviour(pecypc_api_handler).
+-behaviour(cowboy_resource_handler).
 -export([
     allowed/2,
     authorize/3,
@@ -39,11 +39,11 @@ pecypc_log:info({allowed, Method, Scope}),
 
 get(Q, O) ->
 pecypc_log:info({get, Q, O}),
-  {ok, <<"GOT">>}.
+  {ok, [{<<"x">>, <<"y">>}]}.
 
 create(B, Q, O) ->
 pecypc_log:info({create, B, Q, O}),
-  {goto, <<"CREATED">>}.
+  {ok, B}.
 
 put(B, Q, O) ->
 pecypc_log:info({put, B, Q, O}),

@@ -91,8 +91,8 @@ dispatch() ->
   cowboy_router:compile([{'_', lists:flatten(routes())}]).
 
 routes() -> [
-  {"/api/:bucket[/:id]", pecypc_api, [
-    {handler, pecypc_test},
+  {"/api/:bucket[/:id]", cowboy_resource, [{handler, pecypc_test},
+    % other options
     {token_secret, <<"!cowboyftw!">>}
   ]},
 

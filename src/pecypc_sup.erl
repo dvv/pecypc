@@ -33,8 +33,6 @@
     permanent, 5000, worker, [Name]
   }).
 
-%% @todo session-type worker
-
 %% -----------------------------------------------------------------------------
 %% Supervisor is starting
 %% -----------------------------------------------------------------------------
@@ -44,6 +42,8 @@ init([]) ->
   {ok, { {one_for_one, 5, 10}, [
     % main logic
     ?SERVER(pecypc),
+    % sessions
+    ?SUPER(pecypc_session_sup),
     % web server
     ?WORKER(pecypc_web)
   ]} }.
