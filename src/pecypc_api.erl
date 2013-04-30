@@ -12,13 +12,12 @@
     init/3,
     terminate/3,
     rest_init/2,
-    resource_available/2,
+    % resource_available/2,
     allowed_methods/2,
-    malformed_request/2,
+    % malformed_request/2,
     is_authorized/2,
     forbidden/2,
-    valid_content_headers/2,
-    options/2,
+    % options/2,
     content_types_accepted/2,
     content_types_provided/2,
     delete_resource/2,
@@ -33,7 +32,8 @@
 % setters
 -export([
     put_form/2,
-    put_json/2
+    put_json/2,
+    rpc_json/2
   ]).
 
 -type proplist() :: list({term(), term()}).
@@ -83,23 +83,18 @@ terminate(_Reason, _Req, _State) ->
 rest_init(Req, State) ->
   {ok, Req, State}.
 
-resource_available(Req, State) ->
-  {true, Req, State}.
+% resource_available(Req, State) ->
+%   {true, Req, State}.
 
-allowed_methods(Req, State = #state{options = Opts}) ->
-  case lists:keyfind(allow, 1, Opts) of
-    {_, Methods} ->
-      {Methods, Req, State};
-    false ->
-      {[<<"GET">>, <<"POST">>, <<"PUT">>, <<"DELETE">>,
-          <<"PATCH">>, <<"HEAD">>], Req, State}
-  end.
+allowed_methods(Req, State) ->
+  {[<<"GET">>, <<"POST">>, <<"PUT">>, <<"DELETE">>,
+    <<"PATCH">>, <<"HEAD">>, <<"OPTIONS">>], Req, State}.
 
 %%
 %% Validate GET requests. Body is not yet available and conneg is not yet done.
 %%
-malformed_request(Req, State) ->
-  {false, Req, State}.
+% malformed_request(Req, State) ->
+%   {false, Req, State}.
 
 %%
 %% Verify that authentication credentials provided and not forged.
@@ -136,27 +131,38 @@ try_authorize(Req, State = #state{params = Params, handler = Handler},
 %% NB: POST carries batch RPC and access will be checked later on
 %%   for each request in the batch.
 %%
-forbidden(Req, State = #state{method = <<"POST">>}) ->
-  {false, Req, State};
+% forbidden(Req, State = #state{method = <<"POST">>}) ->
+%   {false, Req, State};
 %%
 %% Other methods mean single action and access can be checked at once.
 %%
 forbidden(Req, State = #state{method = Method,
     auth = Auth, handler = Handler}) ->
-  {not call_allowed(Method, Auth, Handler), Req, State}.
+  {not call_allowed(handler_for(Method), Auth, Handler), Req, State}.
 
-%%
-%% This may be used to protect against forged Content-Type: headers.
-%% E.g. AFAICS <<"application/json, text/html">> chokes cowboy_rest conneg.
-%%
-valid_content_headers(Req, State) ->
-  {true, Req, State}.
+handler_for(<<"GET">>) -> get;
+handler_for(<<"POST">>) -> create;
+handler_for(<<"PUT">>) -> put;
+handler_for(<<"PATCH">>) -> update;
+handler_for(<<"DELETE">>) -> delete;
+handler_for(<<"OPTIONS">>) -> info;
+handler_for(<<"HEAD">>) -> get.
+
+call_allowed(Method, Auth, Handler) ->
+  case erlang:function_exported(Handler, allowed, 2) of
+    true ->
+      Handler:allowed(Method, Auth);
+    false ->
+      true
+  end.
 
 %%
 %% Called on OPTIONS. Use to set custom headers. Note returned tag is 'ok'.
 %%
-options(Req, State) ->
-  {ok, Req, State}.
+%% @todo Allow-Origin-* here?
+%%
+% options(Req, State) ->
+%   {ok, Req, State}.
 
 %%
 %% Enumerate content types resource may process.
@@ -164,7 +170,9 @@ options(Req, State) ->
 content_types_accepted(Req, State) ->
   {[
     {{<<"application">>, <<"json">>, []}, put_json},
-    {{<<"application">>, <<"x-www-form-urlencoded">>, []}, put_form}
+    {{<<"application">>, <<"x-www-form-urlencoded">>, []}, put_form},
+    % application/rpc+json accepts batch of requests
+    {{<<"application">>, <<"rpc+json">>, []}, rpc_json}
   ], Req, State}.
 
 %%
@@ -173,6 +181,7 @@ content_types_accepted(Req, State) ->
 content_types_provided(Req, State) ->
   {[
     {{<<"application">>, <<"json">>, []}, get_resource},
+    % @todo disable if application/rpc+json data was provided
     {{<<"application">>, <<"x-www-form-urlencoded">>, []}, get_resource}
   ], Req, State}.
 
@@ -222,6 +231,9 @@ get_resource(Req, State = #state{
 %% - set response location: and {true, Req, State} --> 201 Created
 %% - set response body and {true, Req, State} --> 200 OK
 %%
+%% The following applies only on POST
+%% - {Location, Req, State} --> 303 See Other
+%%
 put_json(Req, State) ->
   % @todo make it streaming
   {ok, Body, Req2} = cowboy_req:body(Req),
@@ -240,24 +252,38 @@ put_form(Req, State) ->
   put_resource(Req2, State#state{body = Result}).
 
 %%
+%% Take batch of requests from body, return batch of responses.
+%% Requests processing delegated to application's handle(Method, [Args]).
+%%
+%% Request is triplet array: [Method, Params, Id].
+%% Response is triplet array: [null, Result, Id] | [Error, null, Id].
+%%
+rpc_json(Req, State) ->
+  % @todo make it streaming
+  {ok, Body, Req2} = cowboy_req:body(Req),
+  case jsx:decode(Body, [{error_handler, fun(_, _, _) -> {error, badarg} end}])
+  of
+    {error, _} ->
+      {false, Req2, State};
+    {incomplete, _} ->
+      {false, Req2, State};
+    Data ->
+      State2 = State#state{body = Data},
+      {halt, respond(200, batch_rpc(State2), Req2), State2}
+  end.
+
+%%
 %% @todo add more body decoders here. multipart is welcome.
 %%
 
 %%
-%% POST is used for free-style RPC.
-%%
-put_resource(Req, State = #state{method = <<"POST">>}) ->
-  % {true, set_resp_body(batch_rpc(State), Req), State};
-  {halt, respond(200, batch_rpc(State), Req), State};
-
-%%
-%% Other bodyful methods delegate actual processing to application's
-%% put/3 handler.
+%% Bodyful methods delegate actual processing to application's handlers.
 %% Response entity is encoded according to Accept: header.
 %%
-put_resource(Req, State = #state{method = Method, body = Data,
+put_resource(Req, State = #state{method = <<"POST">>, body = Data,
     params = Params, handler = Handler, options = Opts, auth = Auth}) ->
-  try Handler:put(Data, Params, [{auth, Auth}, {method, Method} | Opts]) of
+  % {halt, respond(200, batch_rpc(State), Req), State};
+  try Handler:create(Data, Params, [{auth, Auth} | Opts]) of
     {ok, Body} ->
       {true, set_resp_body(Body, Req), State};
     ok ->
@@ -267,10 +293,51 @@ put_resource(Req, State = #state{method = Method, body = Data,
     error ->
       {halt, respond(400, undefined, Req), State};
     {goto, Location} ->
-      {true, cowboy_req:set_resp_header(<<"location">>, Location, Req), State}
+      % {true, cowboy_req:set_resp_header(<<"location">>, Location, Req), State}
+      {Location, Req, State}
+  catch Class:Reason ->
+    error_logger:error_msg(
+      "** API handler ~p terminating in create/3~n"
+      "   for the reason ~p:~p~n** State was ~p~n"
+      "** Stacktrace: ~p~n~n",
+      [Handler, Class, Reason, State, erlang:get_stacktrace()]),
+    {halt, respond(500, Reason, Req), State}
+  end;
+
+put_resource(Req, State = #state{method = <<"PUT">>, body = Data,
+    params = Params, handler = Handler, options = Opts, auth = Auth}) ->
+  try Handler:put(Data, Params, [{auth, Auth} | Opts]) of
+    ok ->
+      {true, Req, State};
+    {ok, Body} ->
+      {true, set_resp_body(Body, Req), State};
+    {error, Reason} ->
+      {halt, respond(400, Reason, Req), State};
+    error ->
+      {halt, respond(400, undefined, Req), State}
   catch Class:Reason ->
     error_logger:error_msg(
       "** API handler ~p terminating in put/3~n"
+      "   for the reason ~p:~p~n** State was ~p~n"
+      "** Stacktrace: ~p~n~n",
+      [Handler, Class, Reason, State, erlang:get_stacktrace()]),
+    {halt, respond(500, Reason, Req), State}
+  end;
+
+put_resource(Req, State = #state{method = <<"PATCH">>, body = Data,
+    params = Params, handler = Handler, options = Opts, auth = Auth}) ->
+  try Handler:update(Data, Params, [{auth, Auth} | Opts]) of
+    ok ->
+      {true, Req, State};
+    {ok, Body} ->
+      {true, set_resp_body(Body, Req), State};
+    {error, Reason} ->
+      {halt, respond(400, Reason, Req), State};
+    error ->
+      {halt, respond(400, undefined, Req), State}
+  catch Class:Reason ->
+    error_logger:error_msg(
+      "** API handler ~p terminating in update/3~n"
       "   for the reason ~p:~p~n** State was ~p~n"
       "** Stacktrace: ~p~n~n",
       [Handler, Class, Reason, State, erlang:get_stacktrace()]),
@@ -280,8 +347,6 @@ put_resource(Req, State = #state{method = Method, body = Data,
 %%
 %% Delegates actual processing to application's delete/2 handler.
 %%
-%%
-%% NB: must be defined if DELETE in allowed methods or 500 Internal Server Error
 %% It should start deleting the resource and return.
 %% - {true, Req, State} --> 204 No Content, unless delete_completed/2 defined
 %% - {X =/= true, Req, State} --> 500 Internal Server Error
@@ -322,19 +387,11 @@ delete_completed(Req, State = #state{completed = Completed}) ->
 %%------------------------------------------------------------------------------
 %%
 
-%%
-%% Takes batch of requests from body, returns batch of responses.
-%% Requests processing delegated to application's handle(Method, [Args]).
-%%
-%% Request is triplet array: [Method, Params, Id].
-%% Response is triplet array: [null, Result, Id] | [Error, null, Id].
-%%
 batch_rpc(#state{body = Batch,
-    handler = Handler, options = Opts, auth = Auth}) ->
-  Opts2 = [{auth, Auth} | Opts],
+    handler = Handler, auth = Auth, options = Opts}) ->
   [case call_allowed(Method, Auth, Handler) of
     true ->
-      try Handler:handle(Method, Args, Opts2) of
+      try Handler:call(Method, Args, Opts) of
         {ok, Result} ->
           [null, Result, Id];
         ok ->
@@ -374,14 +431,6 @@ batch_rpc(#state{body = Batch,
 %% -----------------------------------------------------------------------------
 %%
 
-call_allowed(Method, Auth, Handler) ->
-  case erlang:function_exported(Handler, allowed, 2) of
-    true ->
-      Handler:allowed(Method, Auth);
-    false ->
-      true
-  end.
-
 %%
 %% Error reporting.
 %%
@@ -418,7 +467,7 @@ serialize(Body, Req) ->
 
 %% NB: first argument should match those of content_types_*/2
 encode({<<"application">>, <<"x-www-form-urlencoded">>, []}, Body, _Req) ->
-  urlencode(Body);
+  build_qs(Body);
 encode({<<"application">>, <<"json">>, []}, Body, _Req) ->
   jsx:encode(Body).
 
@@ -428,11 +477,17 @@ urlencode(Bin) when is_binary(Bin) ->
 urlencode(Atom) when is_atom(Atom) ->
   urlencode(atom_to_binary(Atom, latin1));
 urlencode(Int) when is_integer(Int) ->
-  urlencode(list_to_binary(integer_to_list(Int)));
-urlencode({K, undefined}) ->
+  % NB: nothing unsafe in integers
+  list_to_binary(integer_to_list(Int)).
+
+build_qs_pair({K, undefined}) ->
   << (urlencode(K))/binary, $= >>;
-urlencode({K, V}) ->
-  << (urlencode(K))/binary, $=, (urlencode(V))/binary >>;
-urlencode(List) when is_list(List) ->
-  << "&", R/binary >> = << << "&", (urlencode(X))/binary >> || X <- List >>,
+build_qs_pair({K, V}) ->
+  << (urlencode(K))/binary, $=, (urlencode(V))/binary >>.
+
+-spec build_qs(Params :: proplist()) -> binary().
+build_qs([]) ->
+  <<>>;
+build_qs(List) when is_list(List) ->
+  << "&", R/binary >> = << << "&", (build_qs_pair(X))/binary >> || X <- List >>,
   R.

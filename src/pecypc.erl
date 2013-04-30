@@ -27,7 +27,7 @@
   }).
 
 init(_Arg) ->
-  % pecypc_log:info({init_pecypc, _Arg}),
+  pecypc_log:info({init_pecypc, _Arg}),
   process_flag(trap_exit, true), % activate terminate callback
   State = #state{},
   {ok, State}.

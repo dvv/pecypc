@@ -47,9 +47,27 @@
   {error, Reason :: error()}.
 
 %%
-%% Put/patch resource.
+%% Create resource.
 %%
-%% Body is request body.
+%% Body is new resource entity.
+%% Query is proplist collected from URI params.
+%% Options is proplist options specified for handler in router augmented with
+%%   authorization info obtained in authorize/3.
+%%
+-callback create(
+    Body :: body(),
+    Query :: query(),
+    Options :: options()) ->
+  ok |
+  {ok, Result :: result()} |
+  {goto, Where :: location()} |
+  error |
+  {error, Reason :: error()}.
+
+%%
+%% Replace resource.
+%%
+%% Body is resource entity.
 %% Query is proplist collected from URI params.
 %% Options is proplist options specified for handler in router augmented with
 %%   authorization info obtained in authorize/3.
@@ -60,7 +78,23 @@
     Options :: options()) ->
   ok |
   {ok, Result :: result()} |
-  {goto, Where :: location()} |
+  error |
+  {error, Reason :: error()}.
+
+%%
+%% Update resource.
+%%
+%% Body is collection of changes.
+%% Query is proplist collected from URI params.
+%% Options is proplist options specified for handler in router augmented with
+%%   authorization info obtained in authorize/3.
+%%
+-callback update(
+    Body :: body(),
+    Query :: query(),
+    Options :: options()) ->
+  ok |
+  {ok, Result :: result()} |
   error |
   {error, Reason :: error()}.
 
@@ -87,7 +121,7 @@
 %% Options is proplist options specified for handler in router augmented with
 %%   authorization info obtained in authorize/3.
 %%
--callback handle(
+-callback call(
     Function :: binary(),
     Args :: list(),
     Options :: options())->

@@ -21,6 +21,8 @@ stop() ->
 
 %% -----------------------------------------------------------------------------
 %% Hot-reload protocol options
+%%
+%% NB: use this exported function to update running configuration
 %% -----------------------------------------------------------------------------
 
 reload() ->
@@ -89,41 +91,14 @@ dispatch() ->
   cowboy_router:compile([{'_', lists:flatten(routes())}]).
 
 routes() -> [
-  {"/api/user[/:id]", pecypc_api, [
-    {handler, pecypc_user},
-    {token_secret, <<"!cowboyftw!">>}
-  ]},
-
   {"/api/:bucket[/:id]", pecypc_api, [
     {handler, pecypc_test},
     {token_secret, <<"!cowboyftw!">>}
   ]},
 
-  % oauth2 server
-  {"/oauth2", oauth2_provider, [
-    {backend, pecypc_test},
-    {client_secret, <<"+cowboyftw+">>},
-    {client_ttl, 86400 * 365},
-    {code_secret, <<"?cowboyftw?">>},
-    {code_ttl, 10},
-    {token_secret, <<"!cowboyftw!">>},
-    {token_ttl, 86400},
-    {refresh_secret, <<"@cowboyftw@">>},
-    {refresh_ttl, 186400}
-  ]},
-
-  % oauth2 client helper
-  [{"/auth/" ++ atom_to_list(P) ++ "/:action", cowboy_social, O}
-        || {P, O} <- pecypc_app:key(social_providers)],
-  % oauth2 profile helper
-  [{"/api/" ++ atom_to_list(P) ++ "/:action", cowboy_social_profile, [{provider, P} | O]}
-        || {P, O} <- pecypc_app:key(social_providers)],
-
   % static content: /* -> /priv/www/*
   {"/[...]", cowboy_static, [
-    %{directory, "priv/www"},
     {directory, {priv_dir, pecypc, [<<"www">>]}},
-    % @todo get rid of gen_server-ish mimetypes
     {mimetypes, { {mimetypes, path_to_mimes}, default} }
   ]}
 ].
