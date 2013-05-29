@@ -2,6 +2,7 @@
 
 -behaviour(cowboy_resource_handler).
 -export([
+    init/3,
     allowed/2,
     authorize/3,
     call/3,
@@ -11,6 +12,9 @@
     put/3,
     update/3
   ]).
+
+init(_Transport, _Req, _Options) ->
+  {upgrade, protocol, cowboy_resource}.
 
 %%
 %% -----------------------------------------------------------------------------
@@ -68,3 +72,42 @@ pecypc_log:info({delete, Q, O}),
 call(<<"add">>, [X, Y], _O) when is_number(X) ->
 pecypc_log:info({add, X, Y}),
   {ok, X + Y}.
+
+%%
+%% -----------------------------------------------------------------------------
+%% Validation rules.
+%% -----------------------------------------------------------------------------
+%%
+
+validate(Schema, D) ->
+  % case jiffy_v:validate(Schema, D, fun validator/3) of
+  case jiffy_v:validate(Schema, D) of
+    {[], Validated} ->
+      {ok, Validated};
+    {Errors, _Partial} ->
+      % {error, [{error, [{C, P} || {C, P, _} <- Errors]}]}
+      {error, [{P, C} || {C, P, _} <- Errors]}
+  end.
+
+% validator(validate, _, _) -> {ok, valid};
+% validator(fix, _, _) -> {ok, <<"FIXED">>}.
+
+schema(get) -> {hash, [
+  % {<<"email">>, required, {string}},
+  {<<"foo">>, required, {hash, [
+    {<<"baz">>, required, {any}}
+  ]}}
+]};
+schema(put) -> {hash, [
+  {<<"email">>, required, {string}},
+  {<<"l">>, required, {list, [{any}]}},
+  {<<"foo">>, required, {hash, [
+    {<<"bar">>, required, {any}}
+  ]}}
+]};
+schema(set) -> {hash, [
+  {<<"email">>, optional, {string}},
+  {<<"foo">>, optional, {hash, [
+    {<<"bar">>, optional, {any}}
+  ]}}
+]}.

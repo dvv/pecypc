@@ -20,6 +20,19 @@ app.controller('MainCtrl', function($scope, $http) {
       }
     }, 200);
   };
+  $scope.loginza = function () {
+    $scope.atoken = '';
+    var loginWindow = window.open('https://loginza.ru/api/widget?token_url=https://a6cypg.hopto.org/auth', 'name', 'height=600,width=450');
+    // var old_atoken = window.atoken;
+    // var poller = setInterval(function () {
+    //   if (window.atoken !== old_atoken) {
+    //     clearInterval(poller);
+    //     old_atoken = window.atoken;
+    //     $scope.atoken = window.atoken;
+    //     $scope.profile = profile;
+    //   }
+    // }, 200);
+  };
   $scope.login1 = function (provider) {
     $http.get('https://a6cypg.hopto.org/auth/' + provider + '/login?flow=implicit', {cache: false})
     .success(function (data) {
