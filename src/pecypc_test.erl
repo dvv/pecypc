@@ -47,7 +47,7 @@ pecypc_log:info({get, Q, O}),
 
 create(B, Q, O) ->
 pecypc_log:info({create, B, Q, O}),
-  {ok, B}.
+  {goto, <<"oki">>}.
 
 put(B, Q, O) ->
 pecypc_log:info({put, B, Q, O}),
