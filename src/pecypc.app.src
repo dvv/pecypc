@@ -18,9 +18,9 @@
     kernel,
     stdlib,
     crypto,
-    lager,
     ssl,
     public_key,
+    lager,
     cowboy,
     mimetypes
   ]},

@@ -17,17 +17,16 @@ start() ->
 start(App) ->
   % pecypc_log:info({starting, App}),
   case application:start(App) of
-      {error, {not_started, Dep}} ->
-        ok = start(Dep),
-        ok = start(App);
-      {error,{already_started, App}} ->
-        ok;
-      ok ->
-        ok;
-      Other ->
-        pecypc_log:error({error_during_start, Other}),
-        Other
-    end.
+    {error, {not_started, Dep}} ->
+      ok = start(Dep),
+      ok = start(App);
+    {error,{already_started, App}} ->
+      ok;
+    ok ->
+      ok;
+    Else ->
+      pecypc_log:error({error_during_start, Else})
+  end.
 
 %% -----------------------------------------------------------------------------
 %% Application is starting
