@@ -58,6 +58,10 @@ config() ->
 transport() -> [
   % Port number to listen to
   {port, 3000},
+  % {port, 443},
+  % % {cacertfile, "priv/ssl/cowboy-ca.crt"},
+  % {certfile, "priv/ssl/server.crt"},
+  % {keyfile, "priv/ssl/server.key"},
   % Interface to listen on
   %{ip, <<"192.168.0.1">>},
   % Maximum number of simultaneous connections
