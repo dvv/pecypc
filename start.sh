@@ -10,7 +10,7 @@ else
 fi
 APP=${PWD##*/}
 # -eval "${APP}_app:start()."
-${ERL} -env ERL_LIBS ".${DIRSEP}deps${DIRSEP}.." +K true +P 4000000 -smp auto \
+${ERL} -env ERL_LIBS ".${DIRSEP}deps" +K true +P 4000000 -smp auto \
   -name ${APP}@127.0.0.1 \
   -boot start_sasl -sasl errlog_type error \
   -s "${APP}_app" \

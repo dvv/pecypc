@@ -6,11 +6,11 @@
     allowed/2,
     authorize/3,
     call/3,
-    create/3,
     delete/2,
     get/2,
-    put/3,
-    update/3
+    patch/3,
+    post/3,
+    put/3
   ]).
 
 init(_Transport, _Req, _Options) ->
@@ -33,7 +33,7 @@ pecypc_log:info({authorize, Type, Credentials, _Options}),
 %%
 allowed(_, none) ->
   false;
-allowed(update, _) ->
+allowed(patch, _) ->
   false;
 allowed(Method, {_Identity, Scope}) ->
 pecypc_log:info({allowed, Method, Scope}),
@@ -45,8 +45,8 @@ get(Q, O) ->
 pecypc_log:info({get, Q, O}),
   {ok, [{<<"x">>, <<"y">>}]}.
 
-create(B, Q, O) ->
-pecypc_log:info({create, B, Q, O}),
+post(B, Q, O) ->
+pecypc_log:info({post, B, Q, O}),
   {goto, <<"oki">>}.
 
 put(B, Q, O) ->
@@ -60,8 +60,8 @@ pecypc_log:info({put, B, Q, O}),
   %       <<"admin.add">>, <<"admin.PUT">>, <<"admin.GET">>, <<"user.*">>
   %     ]}, Secret, Ttl)}]}.
 
-update(B, Q, O) ->
-pecypc_log:info({update, B, Q, O}),
+patch(B, Q, O) ->
+pecypc_log:info({patch, B, Q, O}),
   {ok, <<"UPDATED">>}.
   % {error, <<"PUT">>}.
 
