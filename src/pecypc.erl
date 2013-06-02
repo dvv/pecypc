@@ -30,9 +30,9 @@
 init(_Arg) ->
   pecypc_log:info({init_pecypc, _Arg}),
   process_flag(trap_exit, true), % activate terminate callback
-  {ok, C} = pgsql:connect("127.0.0.1", "postgres", "postgres", [{database, "hypo"}]),
+  % {ok, C} = pgsql:connect("127.0.0.1", "postgres", "postgres", [{database, "hypo"}]),
   State = #state{
-    db = C
+    % db = C
   },
   {ok, State}.
 
