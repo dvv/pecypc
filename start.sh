@@ -1,4 +1,4 @@
-#!/bin/sh -x
+#!/bin/sh
 # windows
 if test "x$USERPROFILE" != x; then
   DIRSEP=';'

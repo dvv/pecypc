@@ -1,6 +1,7 @@
 {"./src/*", [debug_info, {outdir, "./ebin"}, {i, "./src"}, {i, "./include"}]}.
 {"deps/base64url/src/*", [debug_info, {outdir, "deps/base64url/ebin"}, {i, "deps/base64url/src"}, {i, "deps/base64url/include"}]}.
 {"deps/cowboy/src/*", [debug_info, {outdir, "deps/cowboy/ebin"}, {i, "deps/cowboy/src"}, {i, "deps/cowboy/include"}]}.
+{"deps/eredis/src/*", [debug_info, {outdir, "deps/eredis/ebin"}, {i, "deps/eredis/src"}, {i, "deps/eredis/include"}]}.
 {"deps/erlydtl/src/*", [debug_info, {outdir, "deps/erlydtl/ebin"}, {i, "deps/erlydtl/src"}, {i, "deps/erlydtl/include"}]}.
 {"deps/goldrush/src/*", [debug_info, {outdir, "deps/goldrush/ebin"}, {i, "deps/goldrush/src"}, {i, "deps/goldrush/include"}]}.
 {"deps/gproc/src/*", [debug_info, {outdir, "deps/gproc/ebin"}, {i, "deps/gproc/src"}, {i, "deps/gproc/include"}]}.
