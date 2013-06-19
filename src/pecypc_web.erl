@@ -97,17 +97,15 @@ dispatch() ->
 routes() -> [
   {"/api/:bucket[/:id]", pecypc_test, [{token_secret, <<"!cowboyftw!">>}]},
 
-  {"/auth", cowboy_social_loginza, [
+  {"/session[/:id]", pecypc_sess, []},
+
+  {"/auth/loginza", cowboy_social_loginza, [
     {id, <<"52001">>},
     {secret, <<"4e78bf1e3cce0d799c32d6bb93e79465">>}
   ]},
 
-  % oauth2 client helper
-  [{"/auth/" ++ atom_to_list(P) ++ "/:action", cowboy_social, O}
-        || {P, O} <- pecypc_app:key(social_providers)],
-  % oauth2 profile helper
-  [{"/api/" ++ atom_to_list(P) ++ "/:action", cowboy_social_profile, [{provider, P} | O]}
-        || {P, O} <- pecypc_app:key(social_providers)],
+  % oauth2 client
+  {"/auth/:provider/:action", cowboy_social, pecypc_app:key(social_providers)},
 
   % static content: /* -> /priv/www/*
   {"/", cowboy_static, [
