@@ -43,7 +43,7 @@ pecypc_log:info({allowed, Method, Scope}),
 
 get(Q, O) ->
 pecypc_log:info({get, Q, O}),
-  {ok, [{<<"x">>, <<"y">>}]}.
+  {ok, [{<<"x">>, Q}]}.
 
 post(B, Q, O) ->
 pecypc_log:info({post, B, Q, O}),

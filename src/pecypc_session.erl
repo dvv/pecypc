@@ -97,12 +97,12 @@ call(Id, Cmd) ->
   gen_server:call(?PID(Id), {command, Cmd}).
 
 read() ->
-  read(all()).
+  gproc:select([{{?KEY('_'), '_', '$1'}, [], ['$1']}]).
 
 read(L) when is_list(L) ->
-  [gen_server:call(P, get) || P <- L];
+  [read(Id) || Id <- L];
 read(Id) ->
-  gen_server:call(?PID(Id), get).
+  gproc:select([{{?KEY(Id), '_', '$1'}, [], ['$1']}]).
 
 write(Id, Data) ->
   gen_server:cast(?PID(Id), {set, Data}).

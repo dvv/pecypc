@@ -4,7 +4,7 @@
 -behaviour(application).
 -export([start/0, start/2, stop/1]).
 
--export([key/1]).
+-export([key/1, key/2]).
 
 %% -----------------------------------------------------------------------------
 %% Application starter, ensures dependencies are started.
@@ -59,6 +59,9 @@ key(Key) ->
       {_, Value} = lists:keyfind(Key, 1, config()),
       Value
   end.
+
+key(Key, Value) ->
+  application:set_env(pecypc, Key, Value).
 
 % key(Key, Default) ->
 %   case lists:keyfind(Key, 1, config()) of

@@ -22,7 +22,8 @@
     public_key,
     lager,
     cowboy,
-    mimetypes
+    mimetypes,
+    gproc
   ]},
 
   % configuration

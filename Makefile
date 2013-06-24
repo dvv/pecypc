@@ -1,10 +1,11 @@
 PROJECT = pecypc
 
-DEPS = lager cowboy mimetypes erlydtl stable
+#DEPS = lager cowboy mimetypes erlydtl stable
+DEPS = lager cowboy erlydtl stable
 
 dep_lager = https://github.com/basho/lager.git HEAD
 dep_cowboy = https://github.com/extend/cowboy.git HEAD
-dep_mimetypes = https://github.com/dvv/mimetypes.git HEAD
+#dep_mimetypes = https://github.com/dvv/mimetypes.git HEAD
 dep_erlydtl = https://github.com/evanmiller/erlydtl.git HEAD
 dep_stable = https://github.com/dvv/stable.git HEAD
 

@@ -3,7 +3,12 @@
 
 -define(SERVER, ?MODULE).
 
--export([start_link/0, start/0, stop/0, reload/0]).
+-export([
+    reload/0,
+    start/0,
+    start_link/0,
+    stop/0
+  ]).
 
 %% -----------------------------------------------------------------------------
 %% API Functions
@@ -76,6 +81,7 @@ protocol() -> [
 
   % Request preprocessors
   {middlewares, [
+    cowboy_patch,
     cowboy_router,                % determine handler and its options
     cowboy_session,               % requires session_opts in environment
     % cowboy_bearer,                % requires bearer_opts in environment
@@ -91,30 +97,35 @@ protocol() -> [
   ]}
 ].
 
-dispatch() ->
-  cowboy_router:compile([{'_', lists:flatten(routes())}]).
-
-routes() -> [
-  {"/api/:bucket[/:id]", pecypc_test, [{token_secret, <<"!cowboyftw!">>}]},
-
-  {"/session[/:id]", pecypc_sess, []},
-
-  {"/auth/loginza", cowboy_social_loginza, [
-    {id, <<"52001">>},
-    {secret, <<"4e78bf1e3cce0d799c32d6bb93e79465">>}
-  ]},
-
-  % oauth2 client
-  {"/auth/:provider/:action", cowboy_social, pecypc_app:key(social_providers)},
-
+static() -> [
   % static content: /* -> /priv/www/*
   {"/", cowboy_static, [
     {directory, {priv_dir, pecypc, [<<"www">>]}},
     {file, <<"index.html">>},
-    {mimetypes, { {mimetypes, path_to_mimes}, default} }
+    {mimetypes, [{<<".html">>, [{<<"text">>, <<"html">>, []}]}]}
   ]},
   {"/[...]", cowboy_static, [
     {directory, {priv_dir, pecypc, [<<"www">>]}},
     {mimetypes, { {mimetypes, path_to_mimes}, default} }
   ]}
+].
+
+dispatch() ->
+  cowboy_router:compile([{'_', lists:flatten(routes())}]).
+
+routes() -> [
+  {"/api/:bucket/[:id]", pecypc_test, [{token_secret, <<"!cowboyftw!">>}]},
+
+  % {"/session[/:id]", pecypc_sess, []},
+
+  % {"/auth/loginza", cowboy_social_loginza, [
+  %   {id, <<"52001">>},
+  %   {secret, <<"4e78bf1e3cce0d799c32d6bb93e79465">>}
+  % ]},
+
+  % % oauth2 client
+  % {"/auth/:provider/:action", cowboy_social, pecypc_app:key(social_providers)},
+
+  % static content: /* -> /priv/www/*
+  static()
 ].
