@@ -177,6 +177,3 @@ handle_info(Info, State) ->
 %% Private functions
 %% -----------------------------------------------------------------------------
 
-stop() ->
-  gen_server:cast(?MODULE, stop).
-

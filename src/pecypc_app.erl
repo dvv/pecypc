@@ -20,7 +20,7 @@ start(App) ->
     {error, {not_started, Dep}} ->
       ok = start(Dep),
       ok = start(App);
-    {error,{already_started, App}} ->
+    {error, {already_started, App}} ->
       ok;
     ok ->
       ok;

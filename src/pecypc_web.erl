@@ -40,21 +40,21 @@ reload() ->
 
 config() ->
   % transport options
-  TransOpts = transport(),
   % NB: honor foreign environment
-  TransOpts2 = case os:getenv("PORT") of
-    false -> TransOpts;
-    Port -> [{port, list_to_integer(Port)} |
-                lists:keydelete(port, 1, TransOpts)]
-  end,
-  TransOpts3 = case os:getenv("HOST") of
-    false -> TransOpts2;
-    Host -> [{host, Host} | lists:keydelete(host, 1, TransOpts2)]
-  end,
+  TransOpts =
+      env(host, "HOST",
+      env(port, "PORT", transport(), fun list_to_integer/1)),
   % protocol options
   ProtoOpts = protocol(),
-% pecypc_log:info({proto, ProtoOpts}),
-  {ok, TransOpts3, ProtoOpts}.
+  {ok, TransOpts, ProtoOpts}.
+
+env(OptKey, EnvKey, Opts, ConvertFun) ->
+  case os:getenv(EnvKey) of
+    false -> Opts;
+    Value -> [{OptKey, ConvertFun(Value)} | lists:keydelete(OptKey, 1, Opts)]
+  end.
+env(OptKey, EnvKey, Opts) ->
+  env(OptKey, EnvKey, Opts, fun (X) -> X end).
 
 %% -----------------------------------------------------------------------------
 %% Configuration
@@ -81,51 +81,32 @@ protocol() -> [
 
   % Request preprocessors
   {middlewares, [
-    cowboy_patch,
     cowboy_router,                % determine handler and its options
-    cowboy_session,               % requires session_opts in environment
-    % cowboy_bearer,                % requires bearer_opts in environment
     cowboy_handler                % process request
   ]},
 
   % Request environment
   {env, [
-    {session_opts, pecypc_app:key(session)},
-    {bearer_opts, pecypc_app:key(bearer)},
-    % dispatch rules
-    {dispatch, dispatch()}
+    {dispatch, router()}
   ]}
 ].
 
-static() -> [
-  % static content: /* -> /priv/www/*
-  {"/", cowboy_static, [
-    {directory, {priv_dir, pecypc, [<<"www">>]}},
-    {file, <<"index.html">>},
-    {mimetypes, [{<<".html">>, [{<<"text">>, <<"html">>, []}]}]}
-  ]},
-  {"/[...]", cowboy_static, [
-    {directory, {priv_dir, pecypc, [<<"www">>]}},
-    {mimetypes, { {mimetypes, path_to_mimes}, default} }
-  ]}
-].
+% root() ->
+%   pecypc_log:info({roor}),
+%   <<"c:/dev/pecypc/priv/www">>.
 
-dispatch() ->
-  cowboy_router:compile([{'_', lists:flatten(routes())}]).
-
-routes() -> [
-  {"/api/:bucket/[:id]", pecypc_test, [{token_secret, <<"!cowboyftw!">>}]},
-
-  % {"/session[/:id]", pecypc_sess, []},
-
-  % {"/auth/loginza", cowboy_social_loginza, [
-  %   {id, <<"52001">>},
-  %   {secret, <<"4e78bf1e3cce0d799c32d6bb93e79465">>}
-  % ]},
-
-  % % oauth2 client
-  % {"/auth/:provider/:action", cowboy_social, pecypc_app:key(social_providers)},
-
-  % static content: /* -> /priv/www/*
-  static()
-].
+router() ->
+  cowboy_router:compile([{'_', [
+    {"/api/:bucket/[:id]", pecypc_test, []},
+    % {"/api/dav/[...]", pecypc_dav, [{root, <<"/dav">>}, {auth, {<<"dvv">>, <<"dvv">>}}]},
+    % static content: /* -> /priv/www/*
+    {"/", cowboy_static, [
+      {directory, {priv_dir, pecypc, [<<"www">>]}},
+      {file, <<"index.html">>},
+      {mimetypes, [{<<".html">>, [{<<"text">>, <<"html">>, []}]}]}
+    ]},
+    {"/[...]", cowboy_static, [
+      {directory, {priv_dir, pecypc, [<<"www">>]}},
+      {mimetypes, {{mimetypes, path_to_mimes}, default}}
+    ]}
+  ]}]).
